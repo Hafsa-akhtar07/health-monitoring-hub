@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache node modules (frontend)
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: ${{ runner.os }}-node-frontend-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-frontend-
+
+      - name: Cache node modules (backend)
+        uses: actions/cache@v4
+        with:
+          path: backend/node_modules
+          key: ${{ runner.os }}-node-backend-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-backend-
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: |
+          if npm run -s lint; then
+            echo "Frontend lint passed"
+          else
+            echo "Frontend lint failed (non-blocking)"; exit 1
+          fi
+
+      - name: Lint backend
+        working-directory: backend
+        run: |
+          if npm run -s lint; then
+            echo "Backend lint passed"
+          else
+            echo "Backend lint failed (non-blocking)"; exit 1
+          fi
+
+      - name: Setup Python (for ML / tests)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Python requirements (if any)
+        if: fileExists('ml/requirements.txt') || fileExists('requirements.txt')
+        run: |
+          if [ -f ml/requirements.txt ]; then pip install -r ml/requirements.txt; fi
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test --silent
+
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test --silent -- --watchAll=false
+
+      - name: Run Python ML tests (pytest)
+        if: fileExists('ml') || fileExists('tests')
+        run: |
+          if command -v pytest >/dev/null 2>&1; then
+            pytest -q || (echo "pytest failed"; exit 1)
+          else
+            echo "No pytest found or no tests to run."
+          fi
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Upload frontend build artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/build
+
+      - name: Upload backend artifact (optional)
+        if: success() && -d backend/dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-artifact
+          path: backend/dist
+
+      - name: Save test reports
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            frontend/test-results || true
+            backend/test-results || true
+            ml/test-results || true
+
+  deploy-staging:
+    needs: ci
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Add your deploy steps here (example: rsync, SSH, or call a cloud deploy action)
+      - name: Deploy to staging (placeholder)
+        run: echo "Deploy to staging - configure deploy steps or use secrets for SSH/API"
+
+  deploy-production:
+    needs: ci
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to production (placeholder)
+        env:
+          PROD_SSH: ${{ secrets.PROD_SSH }}
+        run: |
+          echo "Deploy to production - replace with actual deploy steps"
