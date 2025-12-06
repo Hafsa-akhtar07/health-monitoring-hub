@@ -1,0 +1,3 @@
+# Project Summary
+
+"Health Monitoring Hub (HMH) is a web-based system designed to help patients and clinicians better interpret Complete Blood Count (CBC) reports. The system extracts data from uploaded lab reports (via OCR or manual entry), checks values against medical reference ranges, highlights abnormalities, and applies a Machine Learning model to detect potential conditions. It also provides patient-friendly insights, lifestyle recommendations, and visualizations of blood test trends over time. This empowers patients with clearer understanding of their health status while supporting doctors in diagnosis."
