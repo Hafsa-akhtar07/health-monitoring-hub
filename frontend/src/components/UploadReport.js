@@ -1,4 +1,5 @@
    import React, { useState } from 'react';
+   import axios from 'axios';
 
    function UploadReport({ onUploadSuccess }) {
      const [file, setFile] = useState(null);
@@ -62,32 +63,33 @@
        setUploading(true);
        setError(null);
 
-       try {
-         // TODO: Replace with actual API call
-         // For now, simulate upload
-         await new Promise(resolve => setTimeout(resolve, 2000));
-         
-         // Mock success response
-         console.log('File uploaded:', file.name);
-         
-         // Call success callback if provided
-         if (onUploadSuccess) {
-           onUploadSuccess({
-             filename: file.name,
-             extractedValues: {
-               hemoglobin: 12.5,
-               rbc: 4.5,
-               wbc: 7000,
-               platelets: 250000
-             }
-           });
-         }
-       } catch (err) {
-         setError('Upload failed. Please try again.');
-         console.error('Upload error:', err);
-       } finally {
-         setUploading(false);
-       }
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await axios.post('http://localhost:5000/api/upload', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        console.log('Upload successful:', response.data);
+        
+        // Call success callback with actual data from backend
+        if (onUploadSuccess) {
+          onUploadSuccess({
+            reportId: response.data.reportId,
+            extractedData: response.data.extractedData,
+            filename: response.data.fileInfo.originalName
+          });
+        }
+      } catch (err) {
+        const errorMessage = err.response?.data?.message || err.message || 'Upload failed. Please try again.';
+        setError(errorMessage);
+        console.error('Upload error:', err);
+      } finally {
+        setUploading(false);
+      }
      };
 
      return (
