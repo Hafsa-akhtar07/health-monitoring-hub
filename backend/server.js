@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const uploadRoutes = require('./routes/upload');
 const reportRoutes = require('./routes/reports');
 const analyzeRoutes = require('./routes/analyze');
+const historyRoutes = require('./routes/history');
 const { initializeDatabase } = require('./config/database');
 
 dotenv.config();
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/upload', uploadRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/analyze', analyzeRoutes);
+app.use('/api/history', historyRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -35,12 +37,13 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'Health Monitoring Hub API',
     version: '1.0.0',
-    endpoints: {
-      health: '/health',
-      upload: '/api/upload',
-      reports: '/api/reports',
-      analyze: '/api/analyze'
-    }
+      endpoints: {
+        health: '/health',
+        upload: '/api/upload',
+        reports: '/api/reports',
+        analyze: '/api/analyze',
+        history: '/api/history'
+      }
   });
 });
 

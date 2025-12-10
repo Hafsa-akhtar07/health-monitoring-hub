@@ -1,5 +1,7 @@
 const express = require('express');
 const { analyzeCBC } = require('../services/ruleDetection');
+const { detectConditions } = require('../services/conditionDetection');
+const { getSuggestions } = require('../services/openAIService');
 const { query } = require('../config/database');
 const axios = require('axios');
 
@@ -35,6 +37,9 @@ router.post('/', async (req, res) => {
     // Rule-based detection
     const ruleBasedResults = analyzeCBC(cbcData, gender);
 
+    // Detect potential conditions based on abnormalities
+    const detectedConditions = detectConditions(ruleBasedResults, cbcData, gender);
+
     // ML Service call (mock or real)
     let mlResults = null;
     let mlError = null;
@@ -61,6 +66,7 @@ router.post('/', async (req, res) => {
           mild: ruleBasedResults.overallSeverity === 'abnormal' ? 0.7 : 0.1,
           critical: ruleBasedResults.overallSeverity === 'critical' ? 0.9 : 0.1
         },
+        detectedConditions: detectedConditions, // Include conditions in ML results
         note: 'Mock ML results - ML service not available'
       };
     }
@@ -71,6 +77,15 @@ router.post('/', async (req, res) => {
       overallSeverity = 'critical';
     } else if (mlResults && mlResults.severity && overallSeverity === 'normal') {
       overallSeverity = mlResults.severity;
+    }
+
+    // Get diet and medication suggestions from OpenAI
+    let suggestions = null;
+    try {
+      suggestions = await getSuggestions(detectedConditions, cbcData, gender);
+    } catch (suggestionError) {
+      console.warn('Failed to get suggestions:', suggestionError.message);
+      // Continue without suggestions
     }
 
     // Save analysis to database if reportId is provided
@@ -103,6 +118,8 @@ router.post('/', async (req, res) => {
         id: analysisId,
         ruleBased: ruleBasedResults,
         ml: mlResults,
+        conditions: detectedConditions, // Actual conditions detected
+        suggestions: suggestions, // Diet and medication suggestions
         overallSeverity,
         summary: {
           totalParameters: ruleBasedResults.summary.totalParameters,
