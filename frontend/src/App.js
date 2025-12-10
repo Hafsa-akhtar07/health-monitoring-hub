@@ -3,6 +3,7 @@
    import UploadReport from './components/UploadReport';
    import ManualEntry from './components/ManualEntry';
    import ResultsDisplay from './components/ResultsDisplay';
+   import HistoryGraph from './components/HistoryGraph';
 
    function App() {
      const [currentView, setCurrentView] = useState('upload'); // 'upload', 'manual', 'results'
@@ -51,6 +52,12 @@
            >
              Manual Entry
            </button>
+           <button 
+             onClick={() => setCurrentView('history')}
+             className={currentView === 'history' ? 'active' : ''}
+           >
+             History & Trends
+           </button>
          </nav>
          <main>
            {currentView === 'upload' && (
@@ -65,6 +72,9 @@
                cbcData={reportData.cbcData}
                onBack={handleBack}
              />
+           )}
+           {currentView === 'history' && (
+             <HistoryGraph />
            )}
          </main>
        </div>

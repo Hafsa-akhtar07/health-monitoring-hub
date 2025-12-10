@@ -51,16 +51,8 @@ function ResultsDisplay({ reportId, cbcData, onBack, onAnalyze }) {
   };
 
   const getSeverityBadge = (severity) => {
-    const color = getSeverityColor(severity);
     return (
-      <span style={{ 
-        backgroundColor: color, 
-        color: 'white', 
-        padding: '4px 12px', 
-        borderRadius: '12px',
-        fontSize: '14px',
-        fontWeight: 'bold'
-      }}>
+      <span className={`parameter-flag ${severity}`}>
         {severity.toUpperCase()}
       </span>
     );
@@ -147,6 +139,101 @@ function ResultsDisplay({ reportId, cbcData, onBack, onAnalyze }) {
             </div>
           </div>
 
+          {/* Detected Conditions */}
+          {analysis.conditions && analysis.conditions.length > 0 && (
+            <div className="conditions-card">
+              <h3>🔍 Detected Conditions</h3>
+              <div className="conditions-list">
+                {analysis.conditions.map((condition, index) => (
+                  <div key={index} className={`condition-item ${condition.severity}`}>
+                    <div className="condition-header">
+                      <h4>{condition.condition}</h4>
+                      <span className={`parameter-flag ${condition.severity}`}>
+                        {condition.severity.toUpperCase()}
+                      </span>
+                    </div>
+                    <p className="condition-description">{condition.description}</p>
+                    {condition.possibleCauses && condition.possibleCauses.length > 0 && (
+                      <div className="possible-causes">
+                        <strong>Possible Causes:</strong>
+                        <ul>
+                          {condition.possibleCauses.map((cause, i) => (
+                            <li key={i}>{cause}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div className="condition-confidence">
+                      Confidence: {(condition.confidence * 100).toFixed(0)}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Diet and Medication Suggestions */}
+          {analysis.suggestions && (
+            <div className="suggestions-card">
+              <h3>💡 Recommendations</h3>
+              
+              {analysis.suggestions.dietaryRecommendations && analysis.suggestions.dietaryRecommendations.length > 0 && (
+                <div className="suggestion-section">
+                  <h4>🍎 Dietary Recommendations</h4>
+                  <ul className="suggestion-list">
+                    {analysis.suggestions.dietaryRecommendations.map((rec, index) => (
+                      <li key={index}>{rec}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {analysis.suggestions.lifestyleSuggestions && analysis.suggestions.lifestyleSuggestions.length > 0 && (
+                <div className="suggestion-section">
+                  <h4>🏃 Lifestyle Suggestions</h4>
+                  <ul className="suggestion-list">
+                    {analysis.suggestions.lifestyleSuggestions.map((suggestion, index) => (
+                      <li key={index}>{suggestion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {analysis.suggestions.possibleMedications && analysis.suggestions.possibleMedications.length > 0 && (
+                <div className="suggestion-section">
+                  <h4>💊 Possible Medications (Informational Only)</h4>
+                  <div className="medications-list">
+                    {analysis.suggestions.possibleMedications.map((med, index) => (
+                      <div key={index} className="medication-item">
+                        <strong>{med.name}</strong>
+                        <p className="med-purpose">{med.purpose}</p>
+                        {med.note && <p className="med-note">ℹ️ {med.note}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {analysis.suggestions.whenToConsultDoctor && (
+                <div className="suggestion-section">
+                  <h4>👨‍⚕️ When to Consult a Doctor</h4>
+                  <p>{analysis.suggestions.whenToConsultDoctor}</p>
+                </div>
+              )}
+
+              {analysis.suggestions.disclaimer && (
+                <div className="disclaimer-box">
+                  <strong>⚠️ Important Disclaimer:</strong>
+                  <p>{analysis.suggestions.disclaimer}</p>
+                </div>
+              )}
+
+              {analysis.suggestions.note && (
+                <p className="suggestion-note">{analysis.suggestions.note}</p>
+              )}
+            </div>
+          )}
+
           {/* ML Results */}
           {analysis.ml && (
             <div className="ml-card">
@@ -180,7 +267,6 @@ function ResultsDisplay({ reportId, cbcData, onBack, onAnalyze }) {
               <select 
                 value={gender} 
                 onChange={(e) => setGender(e.target.value)}
-                style={{ marginLeft: '10px', padding: '5px' }}
               >
                 <option value="">Select...</option>
                 <option value="male">Male</option>
