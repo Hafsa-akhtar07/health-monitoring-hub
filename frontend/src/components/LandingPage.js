@@ -6,35 +6,10 @@ const LandingPage = ({ onGetStarted }) => {
   const [currentImage, setCurrentImage] = useState(0);
 
   const images = [
-    { 
-      id: 'img1', 
-      // Photo: https://unsplash.com/photos/a-person-in-blue-gloves-is-holding-a-pen-and-a-set-of-test-tubes-Tl92ToxG7C0
-      // Direct image URL format for Unsplash
-      url: 'https://images.unsplash.com/photo-Tl92ToxG7C0?w=800&h=600&fit=crop&auto=format&q=80', 
-      thumb: 'https://images.unsplash.com/photo-Tl92ToxG7C0?w=200&h=150&fit=crop&auto=format&q=80', 
-      alt: 'Medical Laboratory - Test Tubes' 
-    },
-    { 
-      id: 'img2', 
-      // Photo: https://unsplash.com/photos/a-close-up-of-a-blood-vessel-with-red-blood-cells-7bh6ltWLjiU
-      url: 'https://images.unsplash.com/photo-7bh6ltWLjiU?w=800&h=600&fit=crop&auto=format&q=80', 
-      thumb: 'https://images.unsplash.com/photo-7bh6ltWLjiU?w=200&h=150&fit=crop&auto=format&q=80', 
-      alt: 'Blood Vessel with Red Blood Cells' 
-    },
-    { 
-      id: 'img3', 
-      // Photo: https://unsplash.com/photos/experimental-research-top-view-of-test-tube-with-experimental-vaccine-while-being-taken-for-the-analysis-YiaS-deDLkw
-      url: 'https://images.unsplash.com/photo-YiaS-deDLkw?w=800&h=600&fit=crop&auto=format&q=80', 
-      thumb: 'https://images.unsplash.com/photo-YiaS-deDLkw?w=200&h=150&fit=crop&auto=format&q=80', 
-      alt: 'Experimental Research - Test Tube Analysis' 
-    },
-    { 
-      id: 'img4', 
-      // Photo: https://unsplash.com/photos/person-holding-clear-plastic-cup-with-orange-straw-VdkZz0v7EM8
-      url: 'https://images.unsplash.com/photo-VdkZz0v7EM8?w=800&h=600&fit=crop&auto=format&q=80', 
-      thumb: 'https://images.unsplash.com/photo-VdkZz0v7EM8?w=200&h=150&fit=crop&auto=format&q=80', 
-      alt: 'Medical Sample Collection' 
-    }
+    { id: 'img1', url: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', thumb: 'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', alt: 'Blood Analysis' },
+    { id: 'img2', url: 'https://images.unsplash.com/photo-1551601651-2a8555f1a136?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', thumb: 'https://images.unsplash.com/photo-1551601651-2a8555f1a136?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', alt: 'Laboratory' },
+    { id: 'img3', url: 'https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', thumb: 'https://images.unsplash.com/photo-1559757175-0eb30cd8c063?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', alt: 'Medical Report' },
+    { id: 'img4', url: 'https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', thumb: 'https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?ixlib=rb-4.0.3&auto=format&fit=crop&w=200&q=80', alt: 'Health Dashboard' }
   ];
 
   useEffect(() => {

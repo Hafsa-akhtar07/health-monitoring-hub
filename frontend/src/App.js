@@ -15,6 +15,8 @@ function App() {
   const [reportData, setReportData] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState(null);
+  const [previousViewBeforeResults, setPreviousViewBeforeResults] = useState(null);
+  const [uploadState, setUploadState] = useState(null); // persist upload/manual inputs
 
   useEffect(() => {
     // Don't auto-authenticate on mount - always show landing page first
@@ -47,15 +49,24 @@ function App() {
     setCurrentView('dashboard');
   };
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
   const handleLogout = () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      setUser(null);
-      setIsAuthenticated(false);
-      setReportData(null);
-      localStorage.removeItem('hmh_user');
-      setCurrentView('landing');
-      setAuthView('login');
-    }
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutConfirm(false);
+    setUser(null);
+    setIsAuthenticated(false);
+    setReportData(null);
+    localStorage.removeItem('hmh_user');
+    setCurrentView('landing');
+    setAuthView('login');
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutConfirm(false);
   };
 
   const handleGetStarted = () => {
@@ -85,6 +96,8 @@ function App() {
       console.log('Setting report data:', reportDataToSet);
       setReportData(reportDataToSet);
       
+      // Remember where we came from so Back can return there
+      setPreviousViewBeforeResults(currentView);
       setTimeout(() => {
         setCurrentView('results');
       }, 100);
@@ -112,6 +125,8 @@ function App() {
       console.log('Setting report data:', reportDataToSet);
       setReportData(reportDataToSet);
       
+      // Remember where we came from so Back can return there
+      setPreviousViewBeforeResults(currentView);
       setTimeout(() => {
         setCurrentView('results');
       }, 100);
@@ -122,8 +137,16 @@ function App() {
   };
 
   const handleBack = () => {
-    setCurrentView('dashboard');
-    setReportData(null);
+    // Return to where user came from (upload or manual), keep data
+    if (previousViewBeforeResults) {
+      setCurrentView(previousViewBeforeResults);
+    } else {
+      setCurrentView('dashboard');
+    }
+  };
+
+  const handleUploadStateChange = (state) => {
+    setUploadState(state);
   };
 
   const handleNavigate = (view) => {
@@ -283,6 +306,8 @@ function App() {
             <UploadReport 
               onUploadSuccess={handleUploadSuccess} 
               onBack={() => handleNavigate('dashboard')}
+              initialState={uploadState}
+              onStateChange={handleUploadStateChange}
               initialMode={currentView === 'upload' && window.location.hash === '#manual' ? 'manual' : undefined}
             />
           )}
@@ -290,6 +315,8 @@ function App() {
             <UploadReport 
               onUploadSuccess={handleUploadSuccess} 
               onBack={() => handleNavigate('dashboard')}
+              initialState={uploadState}
+              onStateChange={handleUploadStateChange}
               initialMode="manual"
             />
           )}
@@ -320,6 +347,41 @@ function App() {
           </main>
         </div>
       </div>
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full border border-gray-200">
+            <div className="p-6">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                  <i className="fas fa-sign-out-alt text-red-600"></i>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Logout?</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    You will be signed out and your session data will be cleared from this device.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3">
+                <button
+                  onClick={cancelLogout}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmLogout}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition shadow-sm"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,8 +4,8 @@ echo Starting HMH Project Services
 echo ========================================
 echo.
 
-echo [1/3] Starting Python OCR Service (ocr-code)...
-start "Python OCR Service" cmd /k "cd backend\ocr-code && python app.py"
+echo [1/3] Starting Python OCR Service (using ocr-code)...
+start "Python OCR Service" cmd /k "cd backend\ocr-service && python app.py"
 timeout /t 3 /nobreak >nul
 
 echo [2/3] Starting Node.js Backend...

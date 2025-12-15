@@ -1,572 +1,675 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Button } from './ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Alert, AlertDescription } from './ui/alert';
 import axios from 'axios';
 
-function ResultsDisplay({ reportId, cbcData, onBack, onAnalyze }) {
+const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [gender, setGender] = useState('');
+  const [openAIResponse, setOpenAIResponse] = useState(null);
+  const [openAILoading, setOpenAILoading] = useState(false);
   const hasAnalyzed = useRef(false);
 
-  const handleAnalyze = useCallback(async () => {
+  const referenceRanges = {
+    hemoglobin: { min: 13.5, max: 17.5, unit: 'g/dL' },
+    wbc: { min: 4.5, max: 11.0, unit: '×10³/µL' },
+    platelets: { min: 150, max: 450, unit: '×10³/µL' },
+    rbc: { min: 4.5, max: 5.9, unit: '×10⁶/µL' },
+    hematocrit: { min: 41, max: 53, unit: '%' },
+    mcv: { min: 80, max: 100, unit: 'fL' },
+    mch: { min: 27, max: 33, unit: 'pg' },
+    mchc: { min: 32, max: 36, unit: 'g/dL' }
+  };
+
+  const analyzeValues = useCallback(() => {
+    if (!cbcData) return null;
+
+    const results = {
+      parameters: {},
+      normalCount: 0,
+      abnormalCount: 0,
+      criticalCount: 0,
+      overallSeverity: 'normal',
+      detectedConditions: []
+    };
+
+    Object.entries(cbcData).forEach(([key, value]) => {
+      const range = referenceRanges[key];
+      if (!range || isNaN(value)) return;
+
+      const numValue = parseFloat(value);
+      let status = 'normal';
+      let severity = 'normal';
+      let flag = 'NORMAL';
+
+      if (numValue < range.min) {
+        status = 'low';
+        const deviation = ((range.min - numValue) / range.min) * 100;
+        if (deviation > 20) {
+          severity = 'critical';
+          flag = 'CRITICAL';
+        } else if (deviation > 10) {
+          severity = 'abnormal';
+          flag = 'LOW';
+        } else {
+          severity = 'mild';
+          flag = 'LOW';
+        }
+      } else if (numValue > range.max) {
+        status = 'high';
+        const deviation = ((numValue - range.max) / range.max) * 100;
+        if (deviation > 20) {
+          severity = 'critical';
+          flag = 'CRITICAL';
+        } else if (deviation > 10) {
+          severity = 'abnormal';
+          flag = 'HIGH';
+        } else {
+          severity = 'mild';
+          flag = 'HIGH';
+        }
+      }
+
+      results.parameters[key] = {
+        value: numValue,
+        referenceRange: range,
+        status,
+        severity,
+        flag,
+        message: generateParameterMessage(key, numValue, range, status)
+      };
+
+      if (severity === 'critical') results.criticalCount++;
+      else if (severity === 'abnormal' || severity === 'mild') results.abnormalCount++;
+      else results.normalCount++;
+    });
+
+    // Determine overall severity
+    if (results.criticalCount > 0) results.overallSeverity = 'critical';
+    else if (results.abnormalCount > 0) results.overallSeverity = 'abnormal';
+    else results.overallSeverity = 'normal';
+
+    // Detect possible conditions
+    results.detectedConditions = detectConditions(results.parameters);
+
+    return results;
+  }, [cbcData, referenceRanges]);
+
+  const generateParameterMessage = (param, value, range, status) => {
+    const messages = {
+      hemoglobin: {
+        normal: 'Hemoglobin level is within normal range.',
+        low: 'Low hemoglobin may indicate anemia. Consider consulting a doctor.',
+        high: 'High hemoglobin may indicate dehydration or other conditions.'
+      },
+      wbc: {
+        normal: 'White blood cell count is normal.',
+        low: 'Low WBC count may indicate immune system issues.',
+        high: 'High WBC count may indicate infection or inflammation.'
+      },
+      platelets: {
+        normal: 'Platelet count is within normal range.',
+        low: 'Low platelet count may increase bleeding risk.',
+        high: 'High platelet count may indicate clotting disorders.'
+      }
+    };
+
+    return messages[param]?.[status] || `Value is ${status} compared to normal range.`;
+  };
+
+  const detectConditions = (parameters) => {
+    const conditions = [];
+
+    if (parameters.hemoglobin?.severity === 'critical' && parameters.hemoglobin?.status === 'low') {
+      conditions.push({
+        name: 'Anemia',
+        confidence: 0.85,
+        description: 'Severely low hemoglobin levels may indicate anemia.',
+        severity: 'critical',
+        recommendations: ['Consult hematologist', 'Iron supplement', 'Diet rich in iron']
+      });
+    }
+
+    if (parameters.wbc?.severity === 'critical' && parameters.wbc?.status === 'high') {
+      conditions.push({
+        name: 'Possible Infection',
+        confidence: 0.75,
+        description: 'Elevated white blood cells may indicate infection.',
+        severity: 'critical',
+        recommendations: ['Consult doctor', 'Antibiotics if bacterial', 'Rest and hydration']
+      });
+    }
+
+    if (parameters.platelets?.severity === 'critical') {
+      conditions.push({
+        name: 'Platelet Disorder',
+        confidence: 0.65,
+        description: 'Abnormal platelet count may indicate clotting issues.',
+        severity: 'critical',
+        recommendations: ['Hematology consultation', 'Avoid aspirin', 'Monitor bleeding']
+      });
+    }
+
+    return conditions;
+  };
+
+  const fetchOpenAIRecommendations = async () => {
+    if (!cbcData) return;
+    try {
+      setOpenAILoading(true);
+      setOpenAIResponse(null);
+
+      // Ask backend to analyze and get suggestions (which may use OpenAI or mock)
+      const response = await axios.post('http://localhost:5000/api/analyze', {
+        cbcData,
+        reportId,
+        gender: null
+      });
+
+      const suggestions = response.data?.analysis?.suggestions;
+      if (suggestions) {
+        const mapped = {
+          dietary: suggestions.dietaryRecommendations || [],
+          lifestyle: suggestions.lifestyleSuggestions || [],
+          medications: (suggestions.possibleMedications || []).map(med =>
+            med && med.name
+              ? `${med.name}: ${med.purpose || ''}${med.note ? ` (${med.note})` : ''}`
+              : med
+          ),
+          doctorConsult: suggestions.whenToConsultDoctor || 'Please consult a healthcare provider for proper diagnosis and treatment.',
+          disclaimer: suggestions.disclaimer || 'This information is for educational purposes only and not a substitute for professional medical advice.'
+        };
+        setOpenAIResponse(mapped);
+      } else {
+        setOpenAIResponse(null);
+      }
+    } catch (error) {
+      console.error('OpenAI recommendations error:', error.response?.data || error.message);
+      setOpenAIResponse(null);
+    } finally {
+      setOpenAILoading(false);
+    }
+  };
+
+  const handleAnalyze = useCallback(() => {
     if (!cbcData) {
       setError('No CBC data available for analysis');
-      console.error('No cbcData provided to ResultsDisplay');
       return;
     }
 
-    if (loading) {
-      console.log('Analysis already in progress, skipping...');
-      return;
-    }
-
-    console.log('Starting analysis with data:', cbcData);
     setLoading(true);
     setError(null);
 
-    try {
-      const response = await axios.post('http://localhost:5000/api/analyze', {
-        cbcData: cbcData,
-        reportId: reportId,
-        gender: gender || undefined
-      });
-
-      console.log('Analysis API response:', response.data);
-      if (response.data && response.data.analysis) {
-        setAnalysis(response.data.analysis);
-        console.log('Analysis completed successfully');
+    // Simulate analysis with setTimeout
+    setTimeout(() => {
+      const analysisResults = analyzeValues();
+      
+      if (analysisResults) {
+        setAnalysis(analysisResults);
         hasAnalyzed.current = true;
+        
+        // Fetch AI-powered recommendations from backend (OpenAI or rule-based)
+        fetchOpenAIRecommendations();
       } else {
-        throw new Error('Invalid response format from analysis API');
+        setError('Analysis failed. Please try again.');
       }
-    } catch (err) {
-      console.error('Analysis error details:', err);
-      console.error('Error response:', err.response);
-      const errorMessage = err.response?.data?.message || err.message || 'Analysis failed.';
-      setError(errorMessage);
-    } finally {
+      
       setLoading(false);
-    }
-  }, [cbcData, reportId, gender, loading]);
+    }, 1500);
+  }, [cbcData, analyzeValues]);
 
   useEffect(() => {
-    console.log('ResultsDisplay - reportId:', reportId);
-    console.log('ResultsDisplay - cbcData:', cbcData);
-    
-    // Reset hasAnalyzed when data changes
-    if (cbcData) {
-      hasAnalyzed.current = false;
-    }
-  }, [reportId, cbcData]);
-
-  useEffect(() => {
-    if (reportId && cbcData && !hasAnalyzed.current && !loading) {
-      // Auto-analyze when component loads with new data
-      console.log('Auto-analyzing with new data...');
+    if (cbcData && !hasAnalyzed.current) {
       handleAnalyze();
-    } else if (!cbcData && reportId) {
-      console.warn('Missing data - reportId:', reportId, 'cbcData:', cbcData);
-      setError('No CBC data received. Please try uploading again.');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportId, cbcData]);
+  }, [cbcData, handleAnalyze]);
 
   const getSeverityColor = (severity) => {
     switch (severity) {
-      case 'critical': return '#dc3545';
-      case 'abnormal': return '#ffc107';
-      case 'normal': return '#28a745';
-      default: return '#6c757d';
+      case 'critical': return 'bg-red-100 text-red-800 border-red-200';
+      case 'abnormal':
+      case 'mild': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'normal': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  const getSeverityBadge = (severity) => {
-    return (
-      <span className={`parameter-flag ${severity}`}>
-        {severity.toUpperCase()}
-      </span>
-    );
+  const getSeverityIcon = (severity) => {
+    switch (severity) {
+      case 'critical': return 'fas fa-exclamation-triangle';
+      case 'abnormal': return 'fas fa-exclamation-circle';
+      case 'normal': return 'fas fa-check-circle';
+      default: return 'fas fa-info-circle';
+    }
   };
 
   const handleExportPDF = () => {
-    window.print();
+    alert('PDF export functionality would be implemented here');
   };
-
-  const getTooltipText = (paramName) => {
-    const tooltips = {
-      'hemoglobin': 'Hemoglobin carries oxygen in your blood. Low levels may indicate anemia.',
-      'rbc': 'Red Blood Cells transport oxygen. Abnormal counts can indicate various conditions.',
-      'wbc': 'White Blood Cells fight infections. High levels may indicate infection or inflammation.',
-      'platelets': 'Platelets help with blood clotting. Low levels increase bleeding risk.',
-      'hematocrit': 'Hematocrit is the percentage of red blood cells in your blood.',
-      'mcv': 'Mean Corpuscular Volume measures average red blood cell size.',
-      'mch': 'Mean Corpuscular Hemoglobin measures average hemoglobin per red blood cell.',
-      'mchc': 'Mean Corpuscular Hemoglobin Concentration measures hemoglobin concentration.'
-    };
-    return tooltips[paramName.toLowerCase()] || 'Medical parameter in your CBC report.';
-  };
-
-  const getNextCheckDate = (severity) => {
-    const days = severity === 'critical' ? 7 : severity === 'abnormal' ? 30 : 90;
-    const date = new Date();
-    date.setDate(date.getDate() + days);
-    return date.toLocaleDateString();
-  };
-
-  // Safety check - if no data at all, show error
-  if (!cbcData && !reportId) {
-    return (
-      <div className="results-container">
-        <div className="error-message">
-          No data available. Please upload a report or enter values manually.
-        </div>
-        {onBack && (
-          <button onClick={onBack} className="btn-primary" style={{ marginTop: '1rem' }}>
-            ← Go Back
-          </button>
-        )}
-      </div>
-    );
-  }
 
   return (
-    <div className="results-container">
-      <div className="results-header">
-        <div>
-          <h2>Analysis Results</h2>
-          <div className="report-meta">
-            <span className="meta-item">
-              📅 {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
-            </span>
-          </div>
-        </div>
-        {onBack && (
-          <button onClick={onBack} className="btn-secondary">
-            ← Back
+    <div className="min-h-screen bg-gradient-to-br from-white via-[#fff8f8] to-[#FFE4E1] p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-6 md:mb-8">
+          <button 
+            onClick={onBack}
+            className="flex items-center gap-2 text-[#8B0000] hover:text-[#B22222] mb-4 group transition-colors"
+          >
+            <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform"></i>
+            <span className="font-medium">Back to Dashboard</span>
           </button>
-        )}
-      </div>
-
-      {/* Clinical Disclaimer */}
-      <div className="clinical-disclaimer">
-        <strong>⚠️ Important Clinical Disclaimer</strong>
-        <p>
-          Insights are AI-assisted and for awareness only — not a replacement for medical advice. 
-          Please consult with a qualified healthcare professional for proper diagnosis and treatment.
+          
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold text-[#8B0000] mb-2">
+                CBC Analysis Results
+              </h1>
+              <p className="text-gray-600">
+                AI-powered analysis of your complete blood count report
         </p>
       </div>
 
-      {error && (
-        <div className="error-message">
-          {error}
+            <div className="flex gap-3">
+              <Button 
+                variant="outline"
+                onClick={handleExportPDF}
+                className="border-[#8B0000] text-[#8B0000] hover:bg-[#FFE4E1]"
+              >
+                <i className="fas fa-download mr-2"></i>
+                Export Report
+              </Button>
+              <Button 
+                onClick={onUploadNew}
+                className="bg-[#8B0000] hover:bg-[#B22222] text-white"
+              >
+                <i className="fas fa-plus mr-2"></i>
+                New Analysis
+              </Button>
         </div>
-      )}
-
-      {loading && (
-        <div className="loading-message">
-          <div className="skeleton-loader">
-            <div className="skeleton-card" style={{ height: '100px' }}></div>
           </div>
-          Analyzing CBC values...
         </div>
-      )}
 
-      {analysis && (
-        <div className="analysis-results">
-          {/* Overall Summary */}
-          <div className="summary-card">
-            <h3>Overall Assessment</h3>
-            <div className="severity-display">
-              {getSeverityBadge(analysis.overallSeverity)}
+        {/* Clinical Disclaimer */}
+        <Alert className="mb-6 border-amber-200 bg-amber-50">
+          <i className="fas fa-exclamation-triangle text-amber-600 mt-1"></i>
+          <AlertDescription className="text-amber-800">
+            <strong>Important Disclaimer:</strong> This analysis is for informational purposes only. 
+            Always consult with a qualified healthcare professional for medical advice and diagnosis.
+          </AlertDescription>
+        </Alert>
+
+        {/* Loading State */}
+        {loading && (
+          <div className="space-y-4">
+            <div className="skeleton-card" style={{ height: '120px' }}></div>
+            <div className="skeleton-card" style={{ height: '400px' }}></div>
+            <div className="text-center text-gray-600 py-8">
+              <i className="fas fa-spinner fa-spin text-2xl text-[#8B0000] mb-2"></i>
+              <p>Analyzing your CBC values...</p>
             </div>
-            <p className="summary-message">{analysis.summary.summaryMessage}</p>
-            <div className="summary-stats">
-              <div className="stat">
-                <span className="stat-label">Total Parameters:</span>
-                <span className="stat-value">{analysis.summary.totalParameters}</span>
               </div>
-              <div className="stat">
-                <span className="stat-label">Normal:</span>
-                <span className="stat-value normal">{analysis.summary.normalCount}</span>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <Card className="border-red-200 bg-red-50 shadow-lg mb-6">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-3 text-red-800">
+                <i className="fas fa-exclamation-circle text-xl"></i>
+                <div>
+                  <h3 className="font-semibold">Analysis Error</h3>
+                  <p>{error}</p>
               </div>
-              <div className="stat">
-                <span className="stat-label">Abnormal:</span>
-                <span className="stat-value abnormal">{analysis.summary.abnormalCount}</span>
               </div>
-              <div className="stat">
-                <span className="stat-label">Critical:</span>
-                <span className="stat-value critical">{analysis.summary.criticalCount}</span>
+              <Button 
+                onClick={handleAnalyze}
+                className="mt-4 bg-red-600 hover:bg-red-700 text-white"
+              >
+                <i className="fas fa-redo mr-2"></i>
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Analysis Results */}
+        {analysis && !loading && (
+          <div className="space-y-6">
+            {/* Overall Summary */}
+            <Card className="shadow-lg border-2 border-[#8B0000]/10">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-[#8B0000]">
+                      <i className="fas fa-chart-line"></i>
+                      Overall Assessment
+                    </CardTitle>
+                    <CardDescription>
+                      Summary of your CBC analysis results
+                    </CardDescription>
               </div>
+                  <div className={`px-4 py-2 rounded-full font-semibold ${getSeverityColor(analysis.overallSeverity)}`}>
+                    <i className={`${getSeverityIcon(analysis.overallSeverity)} mr-2`}></i>
+                    {analysis.overallSeverity.toUpperCase()}
             </div>
           </div>
-
-          {/* Parameter Details */}
-          <div className="parameters-card">
-            <h3>🧬 Parameter Details</h3>
-            <div className="parameters-grid">
-              {Object.entries(analysis.ruleBased.parameters).map(([key, param]) => (
-                <div 
-                  key={key} 
-                  className={`parameter-item ${param.severity}`}
-                >
-                  <div className="parameter-header">
-                    <span className="parameter-name tooltip">
-                      {key.toUpperCase()}
-                      <span className="tooltiptext">{getTooltipText(key)}</span>
-                    </span>
-                    <span className={`parameter-flag ${param.flag.toLowerCase()}`}>
-                      {param.flag}
-                    </span>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="text-2xl font-bold text-green-700">{analysis.normalCount}</div>
+                    <div className="text-sm text-gray-600">Normal</div>
                   </div>
-                  <div className="parameter-value">
-                    {param.value} {param.referenceRange.unit}
+                  <div className="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <div className="text-2xl font-bold text-yellow-700">{analysis.abnormalCount}</div>
+                    <div className="text-sm text-gray-600">Abnormal</div>
                   </div>
-                  <div className="parameter-range">
-                    Range: {param.referenceRange.min} - {param.referenceRange.max} {param.referenceRange.unit}
+                  <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
+                    <div className="text-2xl font-bold text-red-700">{analysis.criticalCount}</div>
+                    <div className="text-sm text-gray-600">Critical</div>
                   </div>
-                  <div className="parameter-message">
-                    {param.message}
+                  <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="text-2xl font-bold text-blue-700">{Object.keys(analysis.parameters).length}</div>
+                    <div className="text-sm text-gray-600">Total Parameters</div>
                   </div>
+                </div>
+                
+                {analysis.detectedConditions.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="font-semibold text-gray-900 mb-2">⚠️ Detected Conditions</h4>
+                    <div className="space-y-2">
+                      {analysis.detectedConditions.map((condition, index) => (
+                        <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-semibold text-red-800">{condition.name}</span>
+                            <span className="text-sm bg-red-100 text-red-800 px-2 py-1 rounded">
+                              {(condition.confidence * 100).toFixed(0)}% confidence
+                            </span>
+                          </div>
+                          <p className="text-sm text-red-700">{condition.description}</p>
                 </div>
               ))}
             </div>
           </div>
+                )}
+              </CardContent>
+            </Card>
 
-          {/* Detailed Analysis for Each Parameter */}
-          <div className="parameters-card" style={{ marginTop: '2rem' }}>
-            <h3>📊 Detailed Analysis for Each Parameter</h3>
-            <p className="section-subtitle">Comprehensive breakdown of each CBC parameter</p>
-            <div className="parameters-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
-              {Object.entries(analysis.ruleBased.parameters).map(([key, param]) => {
-                const paramName = key.charAt(0).toUpperCase() + key.slice(1);
-                const isInRange = param.value >= param.referenceRange.min && param.value <= param.referenceRange.max;
-                const isLow = param.value < param.referenceRange.min;
-                const isHigh = param.value > param.referenceRange.max;
-                const deviation = isLow 
-                  ? ((param.referenceRange.min - param.value) / param.referenceRange.min * 100).toFixed(1)
-                  : isHigh
-                  ? ((param.value - param.referenceRange.max) / param.referenceRange.max * 100).toFixed(1)
-                  : 0;
+            {/* Parameter Details */}
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="fas fa-microscope text-[#8B0000]"></i>
+                  Parameter Details
+                </CardTitle>
+                <CardDescription>
+                  Detailed breakdown of each CBC parameter
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {Object.entries(analysis.parameters).map(([key, param]) => {
+                    const range = param.referenceRange || {};
+                    const min = range.min ?? 0;
+                    const max = range.max ?? 0;
+                    const val = parseFloat(param.value) || 0;
+                    const span = max - min || 1;
+                    const raw = ((val - min) / span) * 100;
+                    const clampedWidth = Math.max(0, Math.min(100, raw));
                 
                 return (
-                  <div 
-                    key={key} 
-                    className={`parameter-item ${param.severity}`}
-                    style={{ 
-                      borderLeft: `4px solid ${getSeverityColor(param.severity)}`,
-                      padding: '1.5rem',
-                      marginBottom: '1rem'
-                    }}
-                  >
-                    <div className="parameter-header" style={{ marginBottom: '1rem' }}>
-                      <span className="parameter-name" style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
-                        {paramName}
-                      </span>
-                      <span className={`parameter-flag ${param.flag.toLowerCase()}`}>
+                      <div 
+                        key={key} 
+                        className={`p-4 rounded-lg border ${
+                          param.severity === 'critical' ? 'border-red-300 bg-red-50' :
+                          param.severity === 'abnormal' || param.severity === 'mild' ? 'border-yellow-300 bg-yellow-50' :
+                          'border-green-300 bg-green-50'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-semibold text-gray-900 capitalize">{key}</span>
+                          <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                            param.flag === 'CRITICAL' ? 'bg-red-100 text-red-800' :
+                            param.flag === 'HIGH' || param.flag === 'LOW' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
                         {param.flag}
-                      </span>
-                    </div>
-                    
-                    <div style={{ display: 'grid', gap: '0.75rem', fontSize: '0.9rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.5rem', borderBottom: '1px solid #e5e7eb' }}>
-                        <span style={{ color: '#6b7280' }}>Current Value:</span>
-                        <span style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
-                          {param.value} {param.referenceRange.unit}
-                        </span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#6b7280' }}>Reference Range:</span>
-                        <span>
-                          {param.referenceRange.min} - {param.referenceRange.max} {param.referenceRange.unit}
-                        </span>
-                      </div>
-                      
-                      {!isInRange && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ color: '#6b7280' }}>Deviation:</span>
-                          <span style={{ color: isLow ? '#3b82f6' : '#ef4444', fontWeight: '600' }}>
-                            {deviation}% {isLow ? 'below' : 'above'} normal
                           </span>
                         </div>
-                      )}
-                      
-                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ color: '#6b7280' }}>Status:</span>
-                        <span style={{ 
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '9999px',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                          backgroundColor: isInRange ? '#d1fae5' : isLow ? '#dbeafe' : '#fee2e2',
-                          color: isInRange ? '#065f46' : isLow ? '#1e40af' : '#991b1b'
-                        }}>
-                          {isInRange ? 'Normal' : isLow ? 'Low' : 'High'}
-                        </span>
+                        
+                        <div className="text-center my-3">
+                          <div className="text-2xl font-bold text-gray-900">{param.value}</div>
+                          <div className="text-sm text-gray-600">{param.referenceRange.unit}</div>
                       </div>
                       
-                      <div style={{ paddingTop: '0.75rem', borderTop: '1px solid #e5e7eb', marginTop: '0.5rem' }}>
-                        <div style={{ color: '#6b7280', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                          Interpretation:
+                        <div className="text-xs text-gray-600 mb-2">
+                          Normal range: {param.referenceRange.min} - {param.referenceRange.max} {param.referenceRange.unit}
                         </div>
-                        <div style={{ color: '#374151', lineHeight: '1.5' }}>
-                          {param.message}
+                        
+                        <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              param.severity === 'critical' ? 'bg-red-500' :
+                              param.severity === 'abnormal' ? 'bg-yellow-500' :
+                              'bg-green-500'
+                            }`}
+                            style={{ width: `${clampedWidth}%` }}
+                          ></div>
                         </div>
-                      </div>
-                      
-                      <div style={{ paddingTop: '0.5rem', fontSize: '0.75rem', color: '#9ca3af' }}>
-                        <div style={{ marginBottom: '0.25rem' }}>
-                          <strong>Clinical Significance:</strong>
-                        </div>
-                        <div style={{ lineHeight: '1.4' }}>
-                          {getTooltipText(key)}
-                        </div>
-                      </div>
-                    </div>
+                        
+                        <p className="text-sm text-gray-700 mt-2">{param.message}</p>
                   </div>
                 );
               })}
             </div>
-          </div>
+              </CardContent>
+            </Card>
 
-          {/* Possible Conditions */}
-          {analysis.conditions && analysis.conditions.length > 0 && (
-            <div className="conditions-card">
-              <h3>🧬 Possible Conditions</h3>
-              <p className="section-subtitle">Based on ML analysis and risk indicators</p>
-              <div className="conditions-list">
-                {analysis.conditions.map((condition, index) => (
-                  <div key={index} className={`condition-item ${condition.severity}`}>
-                    <div className="condition-header">
-                      <h4>{condition.condition}</h4>
-                      <span className={`parameter-flag ${condition.severity}`}>
-                        {condition.severity.toUpperCase()}
-                      </span>
+            {/* AI Recommendations Section */}
+            <Card className="shadow-lg border-2 border-[#8B0000]/20">
+              <CardHeader className="bg-gradient-to-r from-[#fff8f8] to-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-[#8B0000]">
+                      <i className="fas fa-robot"></i>
+                      AI-Powered Recommendations
+                    </CardTitle>
+                    <CardDescription>
+                      Personalized suggestions based on your CBC results
+                    </CardDescription>
                     </div>
-                    <p className="condition-description">{condition.description}</p>
-                    {condition.possibleCauses && condition.possibleCauses.length > 0 && (
-                      <div className="possible-causes">
-                        <strong>Possible Causes:</strong>
-                        <ul>
-                          {condition.possibleCauses.map((cause, i) => (
-                            <li key={i}>{cause}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <div className="condition-confidence">
-                      Confidence: {(condition.confidence * 100).toFixed(0)}%
-                    </div>
+                  <div className="px-3 py-1 bg-[#FFE4E1] text-[#8B0000] rounded-full text-sm font-semibold">
+                    OpenAI Powered
                   </div>
-                ))}
               </div>
-            </div>
-          )}
-
-          {/* Diet and Medication Suggestions */}
-          {analysis.suggestions && (
-            <div className="suggestions-card">
-              <h3>💡 Recommendations</h3>
+              </CardHeader>
               
-              {analysis.suggestions.dietaryRecommendations && analysis.suggestions.dietaryRecommendations.length > 0 && (
-                <div className="suggestion-section">
-                  <h4>🍎 Dietary Recommendations</h4>
-                  <ul className="suggestion-list">
-                    {analysis.suggestions.dietaryRecommendations.map((rec, index) => (
-                      <li key={index}>{rec}</li>
+              <CardContent className="p-6">
+                {/* Loading State for OpenAI */}
+                {openAILoading && (
+                  <div className="text-center py-8">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#8B0000] mb-3"></div>
+                    <p className="text-gray-600">Generating personalized recommendations...</p>
+                </div>
+              )}
+
+                {/* OpenAI Response */}
+                {openAIResponse && !openAILoading && (
+                  <div className="space-y-6">
+                    {/* Dietary Recommendations */}
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-5">
+                      <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                        <i className="fas fa-apple-alt"></i>
+                        Dietary Recommendations
+                      </h4>
+                      <ul className="space-y-2">
+                        {openAIResponse.dietary.map((rec, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <i className="fas fa-check text-green-600 mt-1"></i>
+                            <span className="text-gray-700">{rec}</span>
+                          </li>
                     ))}
                   </ul>
                 </div>
-              )}
 
-              {analysis.suggestions.lifestyleSuggestions && analysis.suggestions.lifestyleSuggestions.length > 0 && (
-                <div className="suggestion-section">
-                  <h4>🏃 Lifestyle Suggestions</h4>
-                  <ul className="suggestion-list">
-                    {analysis.suggestions.lifestyleSuggestions.map((suggestion, index) => (
-                      <li key={index}>{suggestion}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {analysis.suggestions.possibleMedications && analysis.suggestions.possibleMedications.length > 0 && (
-                <div className="suggestion-section">
-                  <h4>💊 Possible Medications (Informational Only)</h4>
-                  <div className="medications-list">
-                    {analysis.suggestions.possibleMedications.map((med, index) => (
-                      <div key={index} className="medication-item">
-                        <strong>{med.name}</strong>
-                        <p className="med-purpose">{med.purpose}</p>
-                        {med.note && <p className="med-note">ℹ️ {med.note}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {analysis.suggestions.whenToConsultDoctor && (
-                <div className="suggestion-section">
-                  <h4>👨‍⚕️ When to Consult a Doctor</h4>
-                  <p>{analysis.suggestions.whenToConsultDoctor}</p>
-                </div>
-              )}
-
-              {analysis.suggestions.disclaimer && (
-                <div className="disclaimer-box">
-                  <strong>⚠️ Important Disclaimer:</strong>
-                  <p>{analysis.suggestions.disclaimer}</p>
-                </div>
-              )}
-
-              {analysis.suggestions.note && (
-                <p className="suggestion-note">{analysis.suggestions.note}</p>
-              )}
-
-              {/* Reference Links */}
-              <div className="reference-links">
-                <h4>📎 Reference Sources</h4>
-                <ul>
-                  <li>
-                    <a href="https://www.mayoclinic.org/tests-procedures/complete-blood-count/about/pac-20384961" target="_blank" rel="noopener noreferrer">
-                      ↗ Mayo Clinic - Complete Blood Count Guide
-                    </a>
-                  </li>
-                  <li>
-                    <a href="https://www.healthline.com/health/complete-blood-count" target="_blank" rel="noopener noreferrer">
-                      ↗ Healthline - Understanding CBC Results
-                    </a>
-                  </li>
-                  <li>
-                    <a href="https://medlineplus.gov/lab-tests/complete-blood-count-cbc/" target="_blank" rel="noopener noreferrer">
-                      ↗ MedlinePlus - CBC Test Information
-                    </a>
-                  </li>
+                    {/* Lifestyle Suggestions */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
+                      <h4 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                        <i className="fas fa-running"></i>
+                        Lifestyle Suggestions
+                      </h4>
+                      <ul className="space-y-2">
+                        {openAIResponse.lifestyle.map((suggestion, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <i className="fas fa-check text-blue-600 mt-1"></i>
+                            <span className="text-gray-700">{suggestion}</span>
+                          </li>
+                        ))}
                 </ul>
               </div>
 
-              {/* Next Check Reminder */}
-              <div className="next-check-reminder">
-                <span className="reminder-icon">📌</span>
-                <div className="reminder-content">
-                  <h4>Next Check Reminder</h4>
-                  <p>
-                    Based on your current severity level ({analysis.overallSeverity}), 
-                    we recommend your next CBC test around <strong>{getNextCheckDate(analysis.overallSeverity)}</strong>.
-                    {analysis.overallSeverity === 'critical' && ' Please consult a doctor immediately.'}
-                  </p>
+                {/* Medicines (Informational Only) */}
+                {openAIResponse.medications && openAIResponse.medications.length > 0 && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-5">
+                    <h4 className="font-semibold text-purple-800 mb-3 flex items-center gap-2">
+                      <i className="fas fa-pills"></i>
+                      Medicines (Informational Only)
+                    </h4>
+                    <ul className="space-y-2">
+                      {openAIResponse.medications.map((med, index) => (
+                        <li key={index} className="flex items-start gap-2">
+                          <i className="fas fa-check text-purple-600 mt-1"></i>
+                          <span className="text-gray-700">{med}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-purple-700 mt-2">
+                      Always consult a qualified clinician before starting or stopping any medication.
+                    </p>
+                  </div>
+                )}
+
+                    {/* When to Consult Doctor */}
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                      <h4 className="font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                        <i className="fas fa-user-md"></i>
+                        When to Consult a Doctor
+                      </h4>
+                      <p className="text-gray-700">{openAIResponse.doctorConsult}</p>
                 </div>
+
+                    {/* Disclaimer */}
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+                      <h4 className="font-semibold text-red-800 mb-3 flex items-center gap-2">
+                        <i className="fas fa-exclamation-triangle"></i>
+                        Important Medical Disclaimer
+                      </h4>
+                      <p className="text-red-700">{openAIResponse.disclaimer}</p>
               </div>
             </div>
           )}
 
-          {/* ML Results */}
-          {analysis.ml && (
-            <div className="ml-card">
-              <h3>
-                <span className="ai-badge">✨ AI Severity Detection</span>
-              </h3>
-              <div className="ml-confidence">
-                <span>Confidence: {(analysis.ml.confidence * 100).toFixed(0)}%</span>
-              </div>
-              {analysis.ml.predictions && (
-                <div className="ml-predictions">
-                  <div className="prediction-item">
-                    <span>Normal: {(analysis.ml.predictions.normal * 100).toFixed(0)}%</span>
+                {/* Regenerate Button */}
+                {openAIResponse && !openAILoading && (
+                  <div className="mt-6 text-center">
+                    <Button 
+                      variant="outline"
+                      onClick={() => fetchOpenAIRecommendations(analysis)}
+                      className="border-[#8B0000] text-[#8B0000] hover:bg-[#FFE4E1]"
+                    >
+                      <i className="fas fa-sync-alt mr-2"></i>
+                      Regenerate Recommendations
+                    </Button>
                   </div>
-                  <div className="prediction-item">
-                    <span>Mild: {(analysis.ml.predictions.mild * 100).toFixed(0)}%</span>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Next Steps */}
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <i className="fas fa-calendar-check text-[#8B0000]"></i>
+                  Next Steps & Follow-up
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-gradient-to-br from-blue-50 to-white rounded-xl border border-blue-200">
+                    <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                      <i className="fas fa-clock"></i>
+                      Recommended Follow-up
+                    </h4>
+                    <p className="text-gray-700">
+                      Based on your {analysis.overallSeverity} results, 
+                      {analysis.overallSeverity === 'critical' 
+                        ? ' consult a healthcare professional immediately.' 
+                        : analysis.overallSeverity === 'abnormal'
+                        ? ' schedule a doctor appointment within 2 weeks.'
+                        : ' routine follow-up in 6-12 months is recommended.'
+                      }
+                    </p>
                   </div>
-                  <div className="prediction-item">
-                    <span>Critical: {(analysis.ml.predictions.critical * 100).toFixed(0)}%</span>
+                  
+                  <div className="p-4 bg-gradient-to-br from-green-50 to-white rounded-xl border border-green-200">
+                    <h4 className="font-semibold text-green-800 mb-2 flex items-center gap-2">
+                      <i className="fas fa-file-medical"></i>
+                      Keep This Report
+                    </h4>
+                    <p className="text-gray-700">
+                      Save or print this analysis to share with your healthcare provider. 
+                      This will help them understand your health trends.
+                    </p>
                   </div>
                 </div>
-              )}
-              {analysis.ml.note && (
-                <p className="ml-note">{analysis.ml.note}</p>
-              )}
-            </div>
-          )}
-
-          {/* Export Actions */}
-          <div className="export-actions">
-            <button onClick={handleExportPDF} className="btn-export">
-              📄 Export as PDF
-            </button>
-            <button className="btn-secondary">
-              🔗 Share with Doctor
-            </button>
-          </div>
-
-          {/* Re-analyze with gender */}
-          <div className="reanalyze-section">
-            <label>
-              Gender (optional, for better analysis):
-              <select 
-                value={gender} 
-                onChange={(e) => setGender(e.target.value)}
-              >
-                <option value="">Select...</option>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-              </select>
-            </label>
-            <button 
-              onClick={handleAnalyze} 
-              className="btn-primary"
-              disabled={loading}
-            >
-              Re-analyze
-            </button>
-          </div>
+              </CardContent>
+            </Card>
         </div>
       )}
 
-      {/* Show extracted data even if analysis hasn't completed */}
-      {cbcData && !analysis && !loading && (
-        <div className="summary-card">
-          <h3>📋 Extracted CBC Values</h3>
-          <p className="summary-message">The following values were extracted from your report:</p>
-          <div className="parameters-grid">
-            {Object.entries(cbcData).filter(([key]) => 
-              !['extractionMethod', 'confidence', 'extractedAt'].includes(key)
-            ).map(([key, value]) => (
-              <div key={key} className="parameter-item">
-                <div className="parameter-header">
-                  <span className="parameter-name">{key.toUpperCase()}</span>
-                </div>
-                <div className="parameter-value">
-                  {value} {key === 'hemoglobin' || key === 'mchc' ? 'g/dL' : 
-                           key === 'rbc' ? 'million cells/μL' :
-                           key === 'wbc' || key === 'platelets' ? 'cells/μL' :
-                           key === 'hematocrit' || key === 'rdw' ? '%' :
-                           key === 'mcv' ? 'fL' : key === 'mch' ? 'pg' : ''}
+        {/* Raw Data Display (if no analysis yet) */}
+        {!analysis && !loading && cbcData && (
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <i className="fas fa-list text-[#8B0000]"></i>
+                Extracted CBC Values
+              </CardTitle>
+              <CardDescription>
+                Values extracted from your uploaded report
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {Object.entries(cbcData).map(([key, value]) => (
+                  <div key={key} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="font-semibold text-gray-900 capitalize mb-1">{key}</div>
+                    <div className="text-xl font-bold text-[#8B0000]">{value}</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      {referenceRanges[key]?.unit || 'units'}
                 </div>
               </div>
             ))}
           </div>
-          {error && (
-            <div className="error-message" style={{ marginTop: '1rem' }}>
-              {error}
+              
+              <div className="mt-6 text-center">
+                <Button 
+                  onClick={handleAnalyze}
+                  className="bg-[#8B0000] hover:bg-[#B22222] text-white shadow-lg"
+                >
+                  <i className="fas fa-brain mr-2"></i>
+                  Analyze with AI
+                </Button>
             </div>
-          )}
-          <button onClick={handleAnalyze} className="btn-primary" style={{ marginTop: '1rem' }}>
-            Analyze Now
-          </button>
+            </CardContent>
+          </Card>
+        )}
         </div>
-      )}
-
-      {!analysis && !loading && !error && !cbcData && (
-        <div className="no-data">
-          <p>No analysis data available. Click "Analyze" to start.</p>
-          <button onClick={handleAnalyze} className="btn-primary">
-            Analyze Now
-          </button>
-        </div>
-      )}
     </div>
   );
-}
+};
 
 export default ResultsDisplay;
-

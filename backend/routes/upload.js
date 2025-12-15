@@ -65,12 +65,32 @@ async function callPythonOCRService(imagePath, originalFilename) {
 
     if (response.data && response.data.success) {
       console.log(`✅ Python OCR service successful: ${response.data.total_detections} text detections`);
+      
+      // Log the full JSON result to console with accuracy
+      console.log('\n' + '='.repeat(80));
+      console.log('📊 OCR EXTRACTION RESULT (JSON)');
+      console.log('='.repeat(80));
+      if (response.data.accuracy_percentage !== undefined) {
+        console.log(`📈 OCR Accuracy: ${response.data.accuracy_percentage.toFixed(2)}% (Avg Confidence: ${response.data.average_confidence?.toFixed(4) || 0})`);
+        console.log(`📝 Total Detections: ${response.data.total_detections || 0}`);
+        if (response.data.duration_seconds !== undefined) {
+          console.log(`⏱️ Duration: ${response.data.duration_seconds.toFixed(2)} seconds`);
+        }
+        console.log('='.repeat(80));
+      }
+      console.log(JSON.stringify(response.data.ocr_result, null, 2));
+      console.log('='.repeat(80) + '\n');
+      
       return {
         success: true,
-        ocr_result: response.data.ocr_result || [],
+        ocr_result: response.data.ocr_result || {},
         all_text: response.data.all_text || '',
         total_detections: response.data.total_detections || 0,
-        raw_response: response.data
+        accuracy_percentage: response.data.accuracy_percentage,
+        average_confidence: response.data.average_confidence,
+        duration_seconds: response.data.duration_seconds,
+        raw_response: response.data,
+        structured_data: response.data.ocr_result || {} // Full structured data from universal parser
       };
     } else {
       throw new Error(response.data?.error || 'OCR extraction failed');
@@ -79,7 +99,7 @@ async function callPythonOCRService(imagePath, originalFilename) {
   } catch (error) {
     if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
       console.error('❌ Python OCR service not available:', error.message);
-      throw new Error('Python OCR service is not running. Please start it: cd backend/ocr-code && python app.py');
+      throw new Error('Python OCR service is not running. Please start it: cd backend/ocr-service && python app.py');
     }
     console.error('❌ Python OCR service error:', error.message);
     throw error;
@@ -113,14 +133,17 @@ function parseCBCValues(ocrResult) {
         allText += item.trim() + '\n';
       }
     });
-  } else if (ocrResult && ocrResult.ocr_result && Array.isArray(ocrResult.ocr_result)) {
-    // Python OCR service format with ocr_result array
-    ocrResult.ocr_result.forEach(item => {
-      if (item && item.text) {
-        allText += item.text.trim() + '\n';
-      }
-    });
-    // Also use all_text if available
+  } else if (ocrResult && ocrResult.ocr_result) {
+    // Python OCR service format - ocr_result can be object or array
+    if (Array.isArray(ocrResult.ocr_result)) {
+      // Array format
+      ocrResult.ocr_result.forEach(item => {
+        if (item && item.text) {
+          allText += item.text.trim() + '\n';
+        }
+      });
+    }
+    // Also use all_text if available (preferred)
     if (ocrResult.all_text) {
       allText = ocrResult.all_text;
     }
@@ -145,9 +168,11 @@ function parseCBCValues(ocrResult) {
       /hb[\s:]*(\d+\.?\d*)/gi
     ],
     wbc: [
-      /(?:wbc|white\s*blood\s*cells?|total\s*w\.?\s*b\.?\s*c\.?|leukocytes|tlc)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
-      /(\d+\.?\d*)\s*(?:×?10³\/µl|k\/µl|k\/ul|per\s*µl)?\s*(?:wbc|white\s*blood)/gi,
-      /wbc[\s:]*(\d+\.?\d*)/gi
+      /(?:w\.?\s*b\.?\s*c\.?|wbc|white\s*blood\s*cells?|total\s*w\.?\s*b\.?\s*c\.?|leukocytes|tlc)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:w\.?\s*b\.?\s*c\.?\s*count)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:×?10³\/µl|k\/µl|k\/ul|per\s*µl|\/ul)?\s*(?:w\.?\s*b\.?\s*c\.?|wbc|white\s*blood)/gi,
+      /wbc[\s:]*(\d+\.?\d*)/gi,
+      /w\.?\s*b\.?\s*c\.?[\s:]*(\d+\.?\d*)/gi
     ],
     platelets: [
       /(?:platelets?|plt|platelet\s*count|thrombocytes)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
@@ -156,9 +181,11 @@ function parseCBCValues(ocrResult) {
       /plt[\s:]*(\d+\.?\d*)/gi
     ],
     rbc: [
-      /(?:rbc|red\s*blood\s*cells?|total\s*r\.?\s*b\.?\s*c\.?|erythrocytes)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
-      /(\d+\.?\d*)\s*(?:×?10⁶\/µl|million\/µl|m\/µl)?\s*(?:rbc|red\s*blood)/gi,
-      /rbc[\s:]*(\d+\.?\d*)/gi
+      /(?:r\.?\s*b\.?\s*c\.?|rbc|red\s*blood\s*cells?|total\s*r\.?\s*b\.?\s*c\.?|erythrocytes)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:r\.?\s*b\.?\s*c\.?\s*count)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:×?10⁶\/µl|million\/µl|m\/µl)?\s*(?:r\.?\s*b\.?\s*c\.?|rbc|red\s*blood)/gi,
+      /rbc[\s:]*(\d+\.?\d*)/gi,
+      /r\.?\s*b\.?\s*c\.?[\s:]*(\d+\.?\d*)/gi
     ],
     hematocrit: [
       /(?:hematocrit|haematocrit|hct|h\.?\s*c\.?\s*t\.?|pcv|packed\s*cell\s*volume)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
@@ -205,6 +232,15 @@ function parseCBCValues(ocrResult) {
               values[key] = value;
               console.log(`✅ Found ${key}: ${value}`);
             }
+            } else if (key === 'rbc') {
+              // RBC: valid physiological range roughly 2-8 (million/µL)
+              if (value >= 0.5 && value <= 20) {
+                values[key] = value;
+                console.log(`✅ Found ${key}: ${value}`);
+              } else {
+                console.log(`⚠️ Skipping improbable ${key} value: ${value}`);
+                continue;
+              }
           } else if (key === 'platelets') {
             // Platelets: if value is < 100, it's likely in ×10³/µL format
             if (value < 100 && value > 10) {
@@ -261,12 +297,20 @@ router.post('/', upload.single('file'), async (req, res) => {
         // Parse CBC values from OCR result
         const parsedData = parseCBCValues(ocrResult);
         
+        // Get full structured data from OCR result (same format as ocr-code JSON files)
+        const structuredData = ocrResult.ocr_result || {};
+        
+        // Combine extracted data with full structured data from universal parser
         extractedData = {
-          ...parsedData.values,
+          ...parsedData.values,  // CBC values parsed from text
+          ...structuredData,     // Full structured data (patient_info, haematology_report, etc.)
           raw_ocr: ocrResult.ocr_result,
           all_text: parsedData.allText || ocrResult.all_text,
           total_detections: ocrResult.total_detections || 0,
-          ocr_result: ocrResult.ocr_result
+          accuracy_percentage: ocrResult.accuracy_percentage,
+          average_confidence: ocrResult.average_confidence,
+          duration_seconds: ocrResult.duration_seconds,
+          ocr_result: ocrResult.ocr_result  // Full JSON result (same as ocr-code output)
         };
         
         console.log(`✅ Python OCR extracted ${extractedData.total_detections} text blocks`);
@@ -293,7 +337,7 @@ router.post('/', upload.single('file'), async (req, res) => {
       if (ocrError.message.includes('not running')) {
         return res.status(503).json({
           error: 'OCR service unavailable',
-          message: 'Python OCR service is not running. Please start it: cd backend/ocr-code && python app.py',
+          message: 'Python OCR service is not running. Please start it: cd backend/ocr-service && python app.py',
           details: process.env.NODE_ENV === 'development' ? ocrError.message : undefined
         });
       }
@@ -337,9 +381,15 @@ router.post('/', upload.single('file'), async (req, res) => {
       validation.warnings.forEach(warning => console.log(`  - ${warning}`));
     }
 
-    // Display extracted data
+    // Display extracted data with accuracy
     console.log('\n' + '='.repeat(80));
     console.log('📊 EXTRACTED CBC DATA');
+    if (extractedData.accuracy_percentage !== undefined) {
+      console.log(`📈 OCR Accuracy: ${extractedData.accuracy_percentage.toFixed(2)}%`);
+    }
+    if (extractedData.duration_seconds !== undefined) {
+      console.log(`⏱️ Duration: ${extractedData.duration_seconds.toFixed(2)} seconds`);
+    }
     console.log('='.repeat(80));
     const cbcParams = ['hemoglobin', 'rbc', 'wbc', 'platelets', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw'];
     

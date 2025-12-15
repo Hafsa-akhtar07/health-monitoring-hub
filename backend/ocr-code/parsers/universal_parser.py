@@ -36,8 +36,8 @@ COMMON_LAB_FIELDS = {
 COMMON_TEST_NAMES = {
     # Haematology tests
     'haemoglobin': ['haemoglobin', 'hemoglobin', 'hb', 'hgb'],
-    'wbc': ['wbc', 'white blood cell', 'total leucocyte count', 'total w.b.c.', 'total wbc', 'leucocyte count'],
-    'rbc': ['rbc', 'red blood cell', 'r.b.c.', 'rbc count'],
+    'wbc': ['wbc', 'w.b.c', 'w.b.c.', 'white blood cell', 'total leucocyte count', 'total w.b.c.', 'total wbc', 'leucocyte count', 'w.b.c count'],
+    'rbc': ['rbc', 'r.b.c', 'r.b.c.', 'red blood cell', 'rbc count', 'r.b.c count'],
     'platelet': ['platelet', 'platelet count', 'plt'],
     'neutrophils': ['neutrophils', 'polymorphs', 'neutrophil'],
     'lymphocytes': ['lymphocytes', 'lymphocyte'],

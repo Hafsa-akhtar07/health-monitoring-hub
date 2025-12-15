@@ -4,24 +4,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Alert, AlertDescription } from './ui/alert';
 import axios from 'axios';
 
-const UploadReport = ({ onUploadSuccess, onBack, initialMode }) => {
-  const [uploadMethod, setUploadMethod] = useState(initialMode || 'file'); // 'file', 'camera', 'manual'
+const defaultManualData = {
+  hemoglobin: '',
+  wbc: '',
+  platelets: '',
+  rbc: '',
+  hematocrit: '',
+  mcv: '',
+  mch: '',
+  mchc: ''
+};
+
+const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onStateChange }) => {
+  const [uploadMethod, setUploadMethod] = useState(initialMode || initialState?.uploadMethod || 'file'); // 'file', 'camera', 'manual'
   const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
-  const [extractedData, setExtractedData] = useState(null);
+  const [extractedData, setExtractedData] = useState(initialState?.extractedData || null);
   const [error, setError] = useState(null);
-  const [manualData, setManualData] = useState({
-    hemoglobin: '',
-    wbc: '',
-    platelets: '',
-    rbc: '',
-    hematocrit: '',
-    mcv: '',
-    mch: '',
-    mchc: ''
-  });
+  const [manualData, setManualData] = useState(initialState?.manualData || defaultManualData);
 
   const cbcReferenceRanges = {
     hemoglobin: { min: 13.5, max: 17.5, unit: 'g/dL', mandatory: true, inhumanMin: 3, inhumanMax: 25 },
@@ -40,6 +42,14 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode }) => {
     }
   }, [initialMode]);
 
+  useEffect(() => {
+    if (initialState) {
+      if (initialState.uploadMethod) setUploadMethod(initialState.uploadMethod);
+      if (initialState.extractedData) setExtractedData(initialState.extractedData);
+      if (initialState.manualData) setManualData(initialState.manualData);
+    }
+  }, [initialState]);
+
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (file && (file.type === 'application/pdf' || file.type.startsWith('image/'))) {
@@ -48,6 +58,13 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode }) => {
       handleFileUpload(file);
     } else {
       setError('Please upload a PDF or image file (JPG, PNG)');
+    }
+    if (onStateChange) {
+      onStateChange({
+        uploadMethod,
+        extractedData,
+        manualData
+      });
     }
   };
 
@@ -61,6 +78,13 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode }) => {
       handleFileUpload(file);
     } else {
       setError('Please upload a PDF or image file (JPG, PNG)');
+    }
+    if (onStateChange) {
+      onStateChange({
+        uploadMethod,
+        extractedData,
+        manualData
+      });
     }
   };
 
@@ -106,7 +130,7 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode }) => {
             });
             
             // Display the extracted values
-            setExtractedData({
+          const newExtracted = {
                 fileName: file.name,
                 date: new Date().toLocaleDateString(),
                 values: cbcValues, // Use extracted CBC values
@@ -114,7 +138,15 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode }) => {
                 totalDetections: ocrData.total_detections || 0,
                 ocrResult: ocrData.ocr_result || ocrData.raw_ocr || [],
                 warnings: response.data.warnings || []
+          };
+          setExtractedData(newExtracted);
+          if (onStateChange) {
+            onStateChange({
+              uploadMethod,
+              extractedData: newExtracted,
+              manualData
             });
+          }
             
             // If no CBC values were extracted but we have OCR text, show a helpful message
             if (Object.keys(cbcValues).length === 0 && ocrData.all_text) {
@@ -146,10 +178,20 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode }) => {
   };
 
   const handleManualInputChange = (field, value) => {
-    setManualData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setManualData(prev => {
+      const updated = {
+        ...prev,
+        [field]: value
+      };
+      if (onStateChange) {
+        onStateChange({
+          uploadMethod,
+          extractedData,
+          manualData: updated
+        });
+      }
+      return updated;
+    });
   };
 
   const checkValueStatus = (value, field) => {

@@ -3,6 +3,30 @@ Parser for Grant Medical Foundation format reports.
 """
 
 
+def normalize_test_name(test_name):
+    """
+    Normalize test names to handle variations like W.B.C, WBC, R.B.C, RBC, etc.
+    """
+    if not test_name:
+        return ""
+    
+    test_lower = test_name.lower().strip()
+    
+    # Handle WBC variations
+    if any(x in test_lower for x in ['w.b.c', 'wbc', 'white blood cell', 'leucocyte count']):
+        if 'w.b.c' in test_lower or 'wbc' in test_lower:
+            return 'WBC'
+        return test_name
+    
+    # Handle RBC variations
+    if any(x in test_lower for x in ['r.b.c', 'rbc', 'red blood cell']):
+        if 'r.b.c' in test_lower or 'rbc' in test_lower:
+            return 'RBC'
+        return test_name
+    
+    return test_name
+
+
 def parse_grant_format(texts):
     """
     Parse Grant Medical Foundation format.
@@ -118,6 +142,11 @@ def parse_grant_format(texts):
                         unit = texts[i + 2].strip()
                     if i + 3 < len(texts):
                         ref_range = texts[i + 3].strip()
+                    
+                    # Normalize test name to handle W.B.C, R.B.C, etc.
+                    normalized_test_name = normalize_test_name(test_name)
+                    if normalized_test_name != test_name:
+                        test_name = normalized_test_name
                     
                     # Determine if it's haematology or blood indices
                     test_lower = test_name.lower()
