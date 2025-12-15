@@ -36,3 +36,6 @@ dist/
 build/
 *.min.js
 *.min.css
+
+# Exclude all markdown files
+*.md

@@ -5,6 +5,7 @@ const uploadRoutes = require('./routes/upload');
 const reportRoutes = require('./routes/reports');
 const analyzeRoutes = require('./routes/analyze');
 const historyRoutes = require('./routes/history');
+const proxyRoutes = require('./routes/proxy');
 const { initializeDatabase } = require('./config/database');
 
 dotenv.config();
@@ -22,6 +23,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/analyze', analyzeRoutes);
 app.use('/api/history', historyRoutes);
+app.use('/api/proxy', proxyRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -75,6 +77,7 @@ const startServer = async () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
       console.log(`📋 Health check: http://localhost:${PORT}/health`);
       console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
+      console.log('🔄 PaddleOCR Proxy available at: http://localhost:5000/api/proxy');
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

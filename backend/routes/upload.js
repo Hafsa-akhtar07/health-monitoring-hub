@@ -2,7 +2,9 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { extractCBCValues, validateExtractedData } = require('../services/ocrService');
+const axios = require('axios');
+const FormData = require('form-data');
+const { validateExtractedData } = require('../services/ocrService');
 const { query } = require('../config/database');
 
 const router = express.Router();
@@ -24,7 +26,6 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  // Accept images and PDFs
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
@@ -42,10 +43,202 @@ const upload = multer({
 });
 
 /**
+ * Call local Python OCR service
+ */
+async function callPythonOCRService(imagePath, originalFilename) {
+  try {
+    const ocrServiceUrl = process.env.OCR_SERVICE_URL || 'http://localhost:5002';
+    console.log(`📤 Calling Python OCR service at ${ocrServiceUrl}/api/extract...`);
+    
+    const form = new FormData();
+    form.append('file', fs.createReadStream(imagePath), {
+      filename: originalFilename,
+      contentType: 'image/jpeg'
+    });
+
+    const response = await axios.post(`${ocrServiceUrl}/api/extract`, form, {
+      headers: form.getHeaders(),
+      timeout: 300000, // 5 minute timeout for OCR (PaddleOCR can be slow on first run)
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
+    });
+
+    if (response.data && response.data.success) {
+      console.log(`✅ Python OCR service successful: ${response.data.total_detections} text detections`);
+      return {
+        success: true,
+        ocr_result: response.data.ocr_result || [],
+        all_text: response.data.all_text || '',
+        total_detections: response.data.total_detections || 0,
+        raw_response: response.data
+      };
+    } else {
+      throw new Error(response.data?.error || 'OCR extraction failed');
+    }
+    
+  } catch (error) {
+    if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      console.error('❌ Python OCR service not available:', error.message);
+      throw new Error('Python OCR service is not running. Please start it: cd backend/ocr-code && python app.py');
+    }
+    console.error('❌ Python OCR service error:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Parse CBC values from OCR text
+ * Handles both Python OCR service format and raw text strings
+ */
+function parseCBCValues(ocrResult) {
+  const values = {};
+  let allText = '';
+  
+  // Handle different input formats
+  if (typeof ocrResult === 'string') {
+    // Direct text string
+    allText = ocrResult;
+  } else if (ocrResult && ocrResult.all_text) {
+    // Python OCR service format with all_text
+    allText = ocrResult.all_text;
+  } else if (Array.isArray(ocrResult)) {
+    // Array of OCR detections
+    ocrResult.forEach(item => {
+      if (item && typeof item === 'object') {
+        const text = (item.text || item.words || '').trim();
+        if (text) {
+          allText += text + '\n';
+        }
+      } else if (typeof item === 'string') {
+        allText += item.trim() + '\n';
+      }
+    });
+  } else if (ocrResult && ocrResult.ocr_result && Array.isArray(ocrResult.ocr_result)) {
+    // Python OCR service format with ocr_result array
+    ocrResult.ocr_result.forEach(item => {
+      if (item && item.text) {
+        allText += item.text.trim() + '\n';
+      }
+    });
+    // Also use all_text if available
+    if (ocrResult.all_text) {
+      allText = ocrResult.all_text;
+    }
+  }
+  
+  if (allText && allText.length > 0) {
+    console.log('📄 OCR Text for parsing (first 500 chars):');
+    console.log(allText.substring(0, Math.min(500, allText.length)));
+  } else {
+    console.log('⚠️ No OCR text extracted!');
+    console.log('📦 ocrResult structure:', Object.keys(ocrResult || {}));
+  }
+  
+  const textLower = allText.toLowerCase();
+  
+  // Enhanced pattern matching for CBC values
+  // Try multiple patterns for each parameter to handle various formats
+  const patterns = {
+    hemoglobin: [
+      /(?:hemoglobin|haemoglobin|hb|hgb|hb\s*\(?g\/dl\)?)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:g\/dl|g\/dL|gdl)?\s*(?:hemoglobin|haemoglobin|hb|hgb)/gi,
+      /hb[\s:]*(\d+\.?\d*)/gi
+    ],
+    wbc: [
+      /(?:wbc|white\s*blood\s*cells?|total\s*w\.?\s*b\.?\s*c\.?|leukocytes|tlc)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:×?10³\/µl|k\/µl|k\/ul|per\s*µl)?\s*(?:wbc|white\s*blood)/gi,
+      /wbc[\s:]*(\d+\.?\d*)/gi
+    ],
+    platelets: [
+      /(?:platelets?|plt|platelet\s*count|thrombocytes)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:×?10³\/µl|k\/µl|k\/ul|per\s*µl)?\s*(?:platelets|plt)/gi,
+      /platelets?[\s:]*(\d+\.?\d*)/gi,
+      /plt[\s:]*(\d+\.?\d*)/gi
+    ],
+    rbc: [
+      /(?:rbc|red\s*blood\s*cells?|total\s*r\.?\s*b\.?\s*c\.?|erythrocytes)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:×?10⁶\/µl|million\/µl|m\/µl)?\s*(?:rbc|red\s*blood)/gi,
+      /rbc[\s:]*(\d+\.?\d*)/gi
+    ],
+    hematocrit: [
+      /(?:hematocrit|haematocrit|hct|h\.?\s*c\.?\s*t\.?|pcv|packed\s*cell\s*volume)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*%?\s*(?:hematocrit|hct)/gi,
+      /hct[\s:]*(\d+\.?\d*)/gi
+    ],
+    mcv: [
+      /(?:mcv|m\.?\s*c\.?\s*v\.?|mean\s*corpuscular\s*volume)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:fl|femtoliters?)?\s*(?:mcv)/gi,
+      /mcv[\s:]*(\d+\.?\d*)/gi
+    ],
+    mch: [
+      /(?:mch|m\.?\s*c\.?\s*h\.?|mean\s*corpuscular\s*hemoglobin)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:pg|picograms?)?\s*(?:mch)/gi,
+      /mch[\s:]*(\d+\.?\d*)/gi
+    ],
+    mchc: [
+      /(?:mchc|m\.?\s*c\.?\s*h\.?\s*c\.?|mean\s*corpuscular\s*hemoglobin\s*concentration)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:g\/dl)?\s*(?:mchc)/gi,
+      /mchc[\s:]*(\d+\.?\d*)/gi
+    ],
+    rdw: [
+      /(?:rdw|r\.?\s*d\.?\s*w\.?|red\s*cell\s*distribution\s*width)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*%?\s*(?:rdw)/gi,
+      /rdw[\s:]*(\d+\.?\d*)/gi
+    ]
+  };
+  
+  // Extract values using multiple patterns
+  for (const [key, patternList] of Object.entries(patterns)) {
+    for (const pattern of patternList) {
+      pattern.lastIndex = 0; // Reset regex
+      const match = pattern.exec(textLower);
+      if (match && match[1]) {
+        const value = parseFloat(match[1]);
+        if (!isNaN(value) && value > 0) {
+          // Unit conversions
+          if (key === 'wbc') {
+            // WBC: if value is < 10, it's likely in ×10³/µL format, convert to absolute
+            if (value < 10 && value > 0.1) {
+              values[key] = value * 1000;
+              console.log(`✅ Found ${key}: ${value} → ${values[key]} (converted from ×10³/µL)`);
+            } else {
+              values[key] = value;
+              console.log(`✅ Found ${key}: ${value}`);
+            }
+          } else if (key === 'platelets') {
+            // Platelets: if value is < 100, it's likely in ×10³/µL format
+            if (value < 100 && value > 10) {
+              values[key] = value * 1000;
+              console.log(`✅ Found ${key}: ${value} → ${values[key]} (converted from ×10³/µL)`);
+            } else {
+              values[key] = value;
+              console.log(`✅ Found ${key}: ${value}`);
+            }
+          } else {
+            values[key] = value;
+            console.log(`✅ Found ${key}: ${value}`);
+          }
+          break; // Stop after first successful match for this parameter
+        }
+      }
+    }
+  }
+  
+  console.log('📊 Extracted CBC values:', values);
+  
+  return {
+    values,
+    allText: allText.trim()
+  };
+}
+
+/**
  * POST /api/upload
- * Upload CBC report image/PDF and extract values via OCR
+ * Upload CBC report image/PDF and extract values via Baidu PaddleOCR
  */
 router.post('/', upload.single('file'), async (req, res) => {
+  let filePath = null;
+  
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -54,18 +247,57 @@ router.post('/', upload.single('file'), async (req, res) => {
       });
     }
 
-    console.log('File uploaded:', req.file.filename);
+    console.log('📁 File uploaded:', req.file.filename);
+    filePath = req.file.path;
 
-    // Extract CBC values using OCR
-    const filePath = req.file.path;
-    let extractedData;
+    // Extract using local Python OCR service
+    let extractedData = {};
     
     try {
-      extractedData = await extractCBCValues(filePath);
+      // Call Python OCR service
+      const ocrResult = await callPythonOCRService(filePath, req.file.originalname);
+      
+      if (ocrResult.success) {
+        // Parse CBC values from OCR result
+        const parsedData = parseCBCValues(ocrResult);
+        
+        extractedData = {
+          ...parsedData.values,
+          raw_ocr: ocrResult.ocr_result,
+          all_text: parsedData.allText || ocrResult.all_text,
+          total_detections: ocrResult.total_detections || 0,
+          ocr_result: ocrResult.ocr_result
+        };
+        
+        console.log(`✅ Python OCR extracted ${extractedData.total_detections} text blocks`);
+        console.log(`📝 All text length: ${extractedData.all_text.length} characters`);
+        
+        // Display parsed values
+        if (Object.keys(parsedData.values).length > 0) {
+          console.log('📊 Parsed CBC Values:');
+          Object.entries(parsedData.values).forEach(([key, value]) => {
+            console.log(`  ✅ ${key}: ${value}`);
+          });
+        } else {
+          console.log('⚠️ No CBC values extracted from OCR text');
+          console.log('📄 First 500 chars of OCR text:');
+          console.log(extractedData.all_text.substring(0, 500));
+        }
+      } else {
+        throw new Error('OCR extraction failed - no data returned');
+      }
+      
     } catch (ocrError) {
-      console.error('OCR extraction error:', ocrError);
-      // Clean up uploaded file
-      fs.unlinkSync(filePath);
+      console.error('❌ OCR extraction error:', ocrError.message);
+      
+      if (ocrError.message.includes('not running')) {
+        return res.status(503).json({
+          error: 'OCR service unavailable',
+          message: 'Python OCR service is not running. Please start it: cd backend/ocr-code && python app.py',
+          details: process.env.NODE_ENV === 'development' ? ocrError.message : undefined
+        });
+      }
+      
       return res.status(500).json({
         error: 'OCR extraction failed',
         message: 'Failed to extract values from the uploaded file. Please try manual entry.',
@@ -74,17 +306,51 @@ router.post('/', upload.single('file'), async (req, res) => {
     }
 
     // Validate extracted data
+    console.log('🔍 Validating extracted data...');
+    console.log('📦 ExtractedData keys:', Object.keys(extractedData));
+    console.log('📝 Has all_text:', !!extractedData.all_text);
+    console.log('📝 all_text length:', extractedData.all_text?.length || 0);
+    
     const validation = validateExtractedData(extractedData);
     
-    if (!validation.isValid) {
-      // Clean up uploaded file
-      fs.unlinkSync(filePath);
+    console.log('✅ Validation result:', {
+      isValid: validation.isValid,
+      errorsCount: validation.errors.length,
+      warningsCount: validation.warnings.length
+    });
+    
+    // Only reject if there are actual errors (not warnings)
+    // Warnings are acceptable - user can manually enter missing values
+    if (!validation.isValid && validation.errors.length > 0) {
+      console.log('❌ Validation failed with errors:', validation.errors);
       return res.status(400).json({
         error: 'Invalid extracted data',
-        message: 'Could not extract required CBC values from the file',
-        details: validation.errors
+        message: 'Could not extract data from the file',
+        details: validation.errors,
+        warnings: validation.warnings
       });
     }
+    
+    // Log warnings if any
+    if (validation.warnings && validation.warnings.length > 0) {
+      console.log('⚠️ Validation warnings:');
+      validation.warnings.forEach(warning => console.log(`  - ${warning}`));
+    }
+
+    // Display extracted data
+    console.log('\n' + '='.repeat(80));
+    console.log('📊 EXTRACTED CBC DATA');
+    console.log('='.repeat(80));
+    const cbcParams = ['hemoglobin', 'rbc', 'wbc', 'platelets', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw'];
+    
+    cbcParams.forEach(param => {
+      if (extractedData[param] !== undefined && extractedData[param] !== null) {
+        console.log(`  ✅ ${param.toUpperCase().padEnd(15)}: ${extractedData[param]}`);
+      } else {
+        console.log(`  ❌ ${param.toUpperCase().padEnd(15)}: NOT FOUND`);
+      }
+    });
+    console.log('='.repeat(80) + '\n');
 
     // Save report to database
     let reportId;
@@ -96,10 +362,9 @@ router.post('/', upload.single('file'), async (req, res) => {
         [req.file.originalname, filePath, JSON.stringify(extractedData)]
       );
       reportId = result.rows[0].id;
+      console.log(`✅ Report saved to database with ID: ${reportId}`);
     } catch (dbError) {
       console.error('Database error:', dbError);
-      // Clean up uploaded file
-      fs.unlinkSync(filePath);
       return res.status(500).json({
         error: 'Database error',
         message: 'Failed to save report to database'
@@ -128,8 +393,12 @@ router.post('/', upload.single('file'), async (req, res) => {
       message: 'An error occurred while processing the upload',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  } finally {
+    // Clean up uploaded file
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
   }
 });
 
 module.exports = router;
-
