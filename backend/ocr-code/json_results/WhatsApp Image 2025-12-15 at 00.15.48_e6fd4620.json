@@ -1,0 +1,108 @@
+{
+  "image_name": "WhatsApp Image 2025-12-15 at 00.15.48_e6fd4620.jpg",
+  "image_path": "images\\WhatsApp Image 2025-12-15 at 00.15.48_e6fd4620.jpg",
+  "processed_at": "2025-12-15T05:27:05.636585",
+  "patient_info": {
+    "patient_id": "Collection Date",
+    "referring_doctor": "MBBS"
+  },
+  "laboratory_info": {
+    "phone": "Smear"
+  },
+  "haematology_report": [
+    {
+      "test_name": "PARTH",
+      "observed_value": "202504227",
+      "unit": "",
+      "reference_range": ""
+    },
+    {
+      "test_name": "HEMOGLOBIN",
+      "observed_value": "",
+      "unit": "mg/dl",
+      "reference_range": "13.5-17.5"
+    },
+    {
+      "test_name": "Total R.B.C.",
+      "observed_value": "18700",
+      "unit": "mill/cumm",
+      "reference_range": "4.5-6.2"
+    },
+    {
+      "test_name": "Total W. B. C.",
+      "observed_value": "18700",
+      "unit": "/cumm",
+      "reference_range": "4000-11000"
+    },
+    {
+      "test_name": "Lymphocytes",
+      "observed_value": "",
+      "unit": "%",
+      "reference_range": "20-45",
+      "category": "Differential Count"
+    },
+    {
+      "test_name": "Eosinophils",
+      "observed_value": "",
+      "unit": "%",
+      "reference_range": "1-6",
+      "category": "Differential Count"
+    },
+    {
+      "test_name": "Monocytes",
+      "observed_value": "",
+      "unit": "%",
+      "reference_range": "2-8",
+      "category": "Differential Count"
+    },
+    {
+      "test_name": "Basophils",
+      "observed_value": "",
+      "unit": "Lakhs /cmm",
+      "reference_range": "",
+      "category": "Differential Count"
+    }
+  ],
+  "blood_indices": [
+    {
+      "test_name": "H.C.T.",
+      "observed_value": "",
+      "unit": "fl",
+      "reference_range": "84-96",
+      "category": "Differential Count"
+    },
+    {
+      "test_name": "M.C.H.",
+      "observed_value": "",
+      "unit": "pg",
+      "reference_range": "27-32",
+      "category": "Differential Count"
+    },
+    {
+      "test_name": "M.C.H.C.",
+      "observed_value": "",
+      "unit": "g/dl",
+      "reference_range": "30-36",
+      "category": "Differential Count"
+    },
+    {
+      "test_name": "R.D.W.",
+      "observed_value": "",
+      "unit": "%",
+      "reference_range": "10.0-15.0",
+      "category": "Differential Count"
+    },
+    {
+      "test_name": "M.P.V.",
+      "observed_value": "",
+      "unit": "%",
+      "reference_range": "6.5-11.0",
+      "category": "Differential Count"
+    }
+  ],
+  "morphology": {},
+  "footer_info": {
+    "doctor_name": "Dr.D.P.Rajput"
+  },
+  "other_fields": {}
+}

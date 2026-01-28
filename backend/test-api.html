@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HMH API Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        h2 { color: #555; margin-top: 0; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 150px;
+            font-family: monospace;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success { border-left: 4px solid #28a745; }
+        .error { border-left: 4px solid #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Health Monitoring Hub API Tester</h1>
+    
+    <!-- Test Analyze Endpoint -->
+    <div class="section">
+        <h2>1. Test Analyze Endpoint (POST /api/analyze)</h2>
+        <textarea id="analyzeData" placeholder='Enter JSON data...'>{
+  "cbcData": {
+    "hemoglobin": 12.5,
+    "rbc": 4.5,
+    "wbc": 7000,
+    "platelets": 250000
+  },
+  "gender": "female"
+}</textarea>
+        <button onclick="testAnalyze()">Test Analyze</button>
+        <div id="analyzeResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Test Manual Entry -->
+    <div class="section">
+        <h2>2. Test Manual Entry (POST /api/reports)</h2>
+        <textarea id="reportData" placeholder='Enter JSON data...'>{
+  "cbcData": {
+    "hemoglobin": 12.5,
+    "rbc": 4.5,
+    "wbc": 7000,
+    "platelets": 250000,
+    "hematocrit": 38.5
+  }
+}</textarea>
+        <button onclick="testReport()">Save Report</button>
+        <div id="reportResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Test File Upload -->
+    <div class="section">
+        <h2>3. Test File Upload (POST /api/upload)</h2>
+        <input type="file" id="fileInput" accept="image/*,application/pdf">
+        <button onclick="testUpload()">Upload File</button>
+        <div id="uploadResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Get All Reports -->
+    <div class="section">
+        <h2>4. Get All Reports (GET /api/reports)</h2>
+        <button onclick="getReports()">Get Reports</button>
+        <div id="reportsResult" class="result" style="display:none;"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000';
+
+        function displayResult(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'result ' + (isError ? 'error' : 'success');
+            element.textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function testAnalyze() {
+            try {
+                const data = JSON.parse(document.getElementById('analyzeData').value);
+                const response = await fetch(`${API_BASE}/api/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                displayResult('analyzeResult', result, !response.ok);
+            } catch (error) {
+                displayResult('analyzeResult', { error: error.message }, true);
+            }
+        }
+
+        async function testReport() {
+            try {
+                const data = JSON.parse(document.getElementById('reportData').value);
+                const response = await fetch(`${API_BASE}/api/reports`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                displayResult('reportResult', result, !response.ok);
+            } catch (error) {
+                displayResult('reportResult', { error: error.message }, true);
+            }
+        }
+
+        async function testUpload() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) {
+                alert('Please select a file');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+
+                const response = await fetch(`${API_BASE}/api/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                displayResult('uploadResult', result, !response.ok);
+            } catch (error) {
+                displayResult('uploadResult', { error: error.message }, true);
+            }
+        }
+
+        async function getReports() {
+            try {
+                const response = await fetch(`${API_BASE}/api/reports`);
+                const result = await response.json();
+                displayResult('reportsResult', result, !response.ok);
+            } catch (error) {
+                displayResult('reportsResult', { error: error.message }, true);
+            }
+        }
+    </script>
+</body>
+</html>
+

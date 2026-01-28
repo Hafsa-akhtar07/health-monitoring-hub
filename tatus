@@ -1,0 +1,15 @@
+[33m0903144[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdevelop[m[33m)[m feat: Add frontend components and update App structure
+[33m172bf39[m feat: Update frontend dependencies and package configuration
+[33ma543cc5[m feat: Add API testing HTML page for backend endpoints
+[33m1caabed[m docs: Add backend README documentation
+[33mb6ae1ea[m feat: Add backend services for OCR, rule detection, and reference ranges
+[33m2390b4c[m feat: Implement API routes for upload, reports, and analysis
+[33m4923499[m feat: Add database schema and initialization
+[33m32d79b8[m feat: Add backend server and database configuration
+[33m777ae78[m feat: Add backend package.json with dependencies
+[33m5fd986f[m chore: Add backend .gitignore to exclude environment files
+[33m187ef2f[m chore: Update .gitignore to exclude sensitive files and build artifacts
+[33me344f06[m[33m ([m[1;31morigin/develop[m[33m)[m chore: Add .gitignore to exclude node_modules
+[33m295e84f[m feat: Add basic App component
+[33m87f840e[m feat: Add React entry point (index.js)
+[33m04821f8[m feat: Add HTML template for React app
