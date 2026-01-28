@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import LandingPage from './components/LandingPage';
+import { authAPI } from './utils/api';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -19,33 +20,93 @@ function App() {
   const [uploadState, setUploadState] = useState(null); // persist upload/manual inputs
 
   useEffect(() => {
-    // Don't auto-authenticate on mount - always show landing page first
-    // User can login if they want to continue their session
+    // Check if user has a valid token on mount
+    const token = localStorage.getItem('hmh_token');
     const savedUser = localStorage.getItem('hmh_user');
-    if (savedUser) {
+    
+    if (token && savedUser) {
+      // Verify token is still valid by calling /api/auth/me
+      // Wrap in try-catch to prevent app crash if API fails
       try {
-        const userData = JSON.parse(savedUser);
-        setUser(userData);
-        // Don't set isAuthenticated - let user see landing page first
-      } catch (e) {
-        console.error('Error parsing saved user:', e);
+        authAPI.getCurrentUser()
+          .then((response) => {
+            if (response && response.success && response.user) {
+              // Token is valid, set authenticated state
+              // Check if user changed - if so, clear previous user's data
+              const currentUserId = user?.id;
+              const newUserId = response.user.id;
+              if (currentUserId && currentUserId !== newUserId) {
+                // Different user logged in, clear all state
+                setReportData(null);
+                setUploadState(null);
+                setPreviousViewBeforeResults(null);
+              }
+              setUser(response.user);
+              setIsAuthenticated(true);
+              setCurrentView('dashboard');
+              // Update localStorage with fresh user data
+              localStorage.setItem('hmh_user', JSON.stringify(response.user));
+            } else {
+              // Token invalid, clear storage
+              localStorage.removeItem('hmh_token');
+              localStorage.removeItem('hmh_user');
+              // Also clear state
+              setReportData(null);
+              setUploadState(null);
+              setPreviousViewBeforeResults(null);
+            }
+          })
+          .catch((error) => {
+            // Token invalid or expired, or API error - clear storage silently
+            console.error('Token verification failed:', error);
+            localStorage.removeItem('hmh_token');
+            localStorage.removeItem('hmh_user');
+            // Also clear state
+            setReportData(null);
+            setUploadState(null);
+            setPreviousViewBeforeResults(null);
+          });
+      } catch (error) {
+        // If API call itself fails (e.g., network error), just clear storage
+        console.error('Error checking authentication:', error);
+        localStorage.removeItem('hmh_token');
         localStorage.removeItem('hmh_user');
+        // Also clear state
+        setReportData(null);
+        setUploadState(null);
+        setPreviousViewBeforeResults(null);
       }
+    } else {
+      // No token or user data, ensure clean state
+      localStorage.removeItem('hmh_token');
+      localStorage.removeItem('hmh_user');
+      // Clear all application state
+      setReportData(null);
+      setUploadState(null);
+      setPreviousViewBeforeResults(null);
     }
   }, []);
 
   const handleLogin = (userData) => {
+    // Token is already stored in localStorage by Login component
+    // Clear any previous user's data when new user logs in
+    setReportData(null);
+    setUploadState(null);
+    setPreviousViewBeforeResults(null);
     setUser(userData);
     setIsAuthenticated(true);
-    localStorage.setItem('hmh_user', JSON.stringify(userData));
     setCurrentView('dashboard');
     setAuthView('login');
   };
 
   const handleSignup = (userData) => {
+    // Token is already stored in localStorage by Signup component
+    // Clear any previous user's data when new user signs up
+    setReportData(null);
+    setUploadState(null);
+    setPreviousViewBeforeResults(null);
     setUser(userData);
     setIsAuthenticated(true);
-    localStorage.setItem('hmh_user', JSON.stringify(userData));
     setCurrentView('dashboard');
   };
 
@@ -60,6 +121,10 @@ function App() {
     setUser(null);
     setIsAuthenticated(false);
     setReportData(null);
+    setUploadState(null); // Clear upload state
+    setPreviousViewBeforeResults(null); // Clear navigation state
+    // Remove both token and user data
+    localStorage.removeItem('hmh_token');
     localStorage.removeItem('hmh_user');
     setCurrentView('landing');
     setAuthView('login');
@@ -304,6 +369,7 @@ function App() {
           )}
           {currentView === 'upload' && (
             <UploadReport 
+              key={`upload-${user?.id || 'no-user'}`} // Force remount when user changes
               onUploadSuccess={handleUploadSuccess} 
               onBack={() => handleNavigate('dashboard')}
               initialState={uploadState}
@@ -313,6 +379,7 @@ function App() {
           )}
           {currentView === 'manual' && (
             <UploadReport 
+              key={`manual-${user?.id || 'no-user'}`} // Force remount when user changes
               onUploadSuccess={handleUploadSuccess} 
               onBack={() => handleNavigate('dashboard')}
               initialState={uploadState}
@@ -326,6 +393,12 @@ function App() {
                 reportId={reportData.reportId}
                 cbcData={reportData.cbcData}
                 onBack={handleBack}
+                onUploadNew={() => {
+                  // Clear current report context and go back to upload screen
+                  setReportData(null);
+                  setPreviousViewBeforeResults('upload');
+                  setCurrentView('upload');
+                }}
               />
             ) : (
               <div className="upload-container">

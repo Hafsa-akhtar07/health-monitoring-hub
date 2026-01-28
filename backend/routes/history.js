@@ -1,29 +1,22 @@
 const express = require('express');
 const { query } = require('../config/database');
+const authenticate = require('../middleware/auth');
 
 const router = express.Router();
 
 /**
  * GET /api/history
- * Get patient history with all reports and analyses
- * Query params: userId (optional), limit, page
+ * Get patient history with all reports and analyses for the authenticated user
+ * Query params: limit, page
+ * Requires authentication
  */
-router.get('/', async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
-    const userId = req.query.userId || null;
     const limit = parseInt(req.query.limit) || 50;
     const page = parseInt(req.query.page) || 1;
     const offset = (page - 1) * limit;
 
-    let whereClause = '';
-    let queryParams = [limit, offset];
-
-    if (userId) {
-      whereClause = 'WHERE r.user_id = $3';
-      queryParams.push(userId);
-    }
-
-    // Get reports with analyses
+    // Get reports with analyses for authenticated user only
     const result = await query(
       `SELECT 
         r.id,
@@ -38,16 +31,16 @@ router.get('/', async (req, res) => {
         a.created_at as analyzed_at
       FROM reports r
       LEFT JOIN analyses a ON r.id = a.report_id
-      ${whereClause}
+      WHERE r.user_id = $1
       ORDER BY r.created_at DESC
-      LIMIT $1 OFFSET $2`,
-      queryParams
+      LIMIT $2 OFFSET $3`,
+      [req.user.id, limit, offset]
     );
 
-    // Get total count
+    // Get total count for this user
     const countResult = await query(
-      `SELECT COUNT(*) FROM reports r ${whereClause}`,
-      userId ? [userId] : []
+      `SELECT COUNT(*) FROM reports r WHERE r.user_id = $1`,
+      [req.user.id]
     );
     const total = parseInt(countResult.rows[0].count);
 
@@ -90,12 +83,12 @@ router.get('/', async (req, res) => {
 
 /**
  * GET /api/history/trends
- * Get trend data for graphing (parameter values over time)
- * Query params: userId (optional), parameter (hemoglobin, rbc, wbc, platelets)
+ * Get trend data for graphing (parameter values over time) for the authenticated user
+ * Query params: parameter (hemoglobin, rbc, wbc, platelets)
+ * Requires authentication
  */
-router.get('/trends', async (req, res) => {
+router.get('/trends', authenticate, async (req, res) => {
   try {
-    const userId = req.query.userId || null;
     const parameter = req.query.parameter || 'hemoglobin'; // Default to hemoglobin
 
     const validParameters = ['hemoglobin', 'rbc', 'wbc', 'platelets', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw'];
@@ -106,15 +99,7 @@ router.get('/trends', async (req, res) => {
       });
     }
 
-    let whereClause = '';
-    let queryParams = [];
-
-    if (userId) {
-      whereClause = 'WHERE r.user_id = $1';
-      queryParams.push(userId);
-    }
-
-    // Get reports with the specified parameter
+    // Get reports with the specified parameter for authenticated user only
     const result = await query(
       `SELECT 
         r.id,
@@ -123,10 +108,10 @@ router.get('/trends', async (req, res) => {
         a.severity
       FROM reports r
       LEFT JOIN analyses a ON r.id = a.report_id
-      ${whereClause}
+      WHERE r.user_id = $2
       AND r.extracted_data->>$1 IS NOT NULL
       ORDER BY r.created_at ASC`,
-      userId ? [parameter, userId] : [parameter]
+      [parameter, req.user.id]
     );
 
     // Format for charting

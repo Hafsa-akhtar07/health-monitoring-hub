@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { authAPI } from '../utils/api';
 
 function Signup({ onSignupSuccess, onSwitchToLogin, onBackToLanding }) {
   const [formData, setFormData] = useState({
@@ -64,20 +65,29 @@ function Signup({ onSignupSuccess, onSwitchToLogin, onBackToLanding }) {
     setLoading(true);
 
     try {
-      // TODO: Replace with actual API call
-      // For now, simulate signup
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Mock successful signup
-      if (onSignupSuccess) {
-        onSignupSuccess({
-          email: formData.email,
-          name: formData.fullName,
-          id: 'user_' + Date.now()
-        });
+      // Call real register API
+      const response = await authAPI.register({
+        email: formData.email,
+        password: formData.password,
+        name: formData.fullName
+      });
+
+      if (response.success && response.token && response.user) {
+        // Store token and user data in localStorage
+        localStorage.setItem('hmh_token', response.token);
+        localStorage.setItem('hmh_user', JSON.stringify(response.user));
+
+        // Call success callback with user data
+        if (onSignupSuccess) {
+          onSignupSuccess(response.user);
+        }
+      } else {
+        setError(response.error || 'Signup failed. Please try again.');
       }
     } catch (err) {
-      setError('Signup failed. Please try again.');
+      // Handle API errors
+      const errorMessage = err.response?.data?.error || err.message || 'Signup failed. Please try again.';
+      setError(errorMessage);
       console.error('Signup error:', err);
     } finally {
       setLoading(false);

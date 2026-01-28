@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
-import axios from 'axios';
+import api from '../utils/api';
 
 const defaultManualData = {
   hemoglobin: '',
@@ -108,7 +108,7 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
             });
         }, 200);
 
-        const response = await axios.post('http://localhost:5000/api/upload', formData, {
+        const response = await api.post('/upload', formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -295,7 +295,7 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/api/reports', {
+      const response = await api.post('/reports', {
         cbcData: manualData
       });
 

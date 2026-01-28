@@ -48,9 +48,29 @@ const initializeDatabase = async () => {
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) UNIQUE NOT NULL,
         name VARCHAR(255),
+        password VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add password column if it doesn't exist (for existing databases)
+    // This handles the case where the table was created before password column was added
+    try {
+      await query(`
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'password'
+          ) THEN
+            ALTER TABLE users ADD COLUMN password VARCHAR(255);
+          END IF;
+        END $$;
+      `);
+    } catch (error) {
+      // Column might already exist, ignore error
+      console.log('Password column check completed');
+    }
 
     // Create reports table
     await query(`

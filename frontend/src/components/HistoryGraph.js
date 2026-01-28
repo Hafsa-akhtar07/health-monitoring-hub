@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 import {
   LineChart,
   Line,
@@ -47,9 +47,8 @@ function HistoryGraph({ userId = null, onNavigate }) {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const params = {};
-      if (userId) params.userId = userId;
-      const response = await axios.get('http://localhost:5000/api/history', { params });
+      // No need to send userId - backend uses authenticated user from token
+      const response = await api.get('/history');
       setReports(response.data.reports || []);
     } catch (err) {
       console.error('Fetch reports error:', err);
@@ -63,9 +62,9 @@ function HistoryGraph({ userId = null, onNavigate }) {
     setError(null);
     try {
       const dataPromises = parameters.map(param => {
+        // No need to send userId - backend uses authenticated user from token
         const params = { parameter: param.value };
-        if (userId) params.userId = userId;
-        return axios.get('http://localhost:5000/api/history/trends', { params })
+        return api.get('/history/trends', { params })
           .then(res => ({ param: param.value, data: res.data.data }))
           .catch(err => ({ param: param.value, data: [] }));
       });

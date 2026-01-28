@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
-import axios from 'axios';
+import api from '../utils/api';
 
 const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
   const [analysis, setAnalysis] = useState(null);
@@ -10,6 +10,7 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
   const [error, setError] = useState(null);
   const [openAIResponse, setOpenAIResponse] = useState(null);
   const [openAILoading, setOpenAILoading] = useState(false);
+  const [mlResult, setMlResult] = useState(null); // backend ML model output
   const hasAnalyzed = useRef(false);
 
   const referenceRanges = {
@@ -160,15 +161,23 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
     try {
       setOpenAILoading(true);
       setOpenAIResponse(null);
+      setMlResult(null);
 
-      // Ask backend to analyze and get suggestions (which may use OpenAI or mock)
-      const response = await axios.post('http://localhost:5000/api/analyze', {
+      // Ask backend to analyze and get suggestions + ML diagnosis
+      const response = await api.post('/analyze', {
         cbcData,
         reportId,
         gender: null
       });
 
-      const suggestions = response.data?.analysis?.suggestions;
+      const backendAnalysis = response.data?.analysis;
+
+      // Capture ML model output from backend
+      if (backendAnalysis?.ml) {
+        setMlResult(backendAnalysis.ml);
+      }
+
+      const suggestions = backendAnalysis?.suggestions;
       if (suggestions) {
         const mapped = {
           dietary: suggestions.dietaryRecommendations || [],
@@ -187,6 +196,7 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
       }
     } catch (error) {
       console.error('OpenAI recommendations error:', error.response?.data || error.message);
+      setMlResult(null);
       setOpenAIResponse(null);
     } finally {
       setOpenAILoading(false);
@@ -246,7 +256,290 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
   };
 
   const handleExportPDF = () => {
-    alert('PDF export functionality would be implemented here');
+    if (!analysis || !cbcData) {
+      alert('No analysis data available to export');
+      return;
+    }
+
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups to export PDF');
+      return;
+    }
+
+    // Get current date
+    const currentDate = new Date().toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    // Build HTML content for print
+    const printHTML = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>CBC Analysis Report - ${currentDate}</title>
+          <style>
+            @media print {
+              @page {
+                margin: 1cm;
+                size: A4;
+              }
+            }
+            body {
+              font-family: 'Arial', sans-serif;
+              margin: 0;
+              padding: 20px;
+              color: #333;
+              background: white;
+            }
+            .header {
+              border-bottom: 3px solid #8B0000;
+              padding-bottom: 15px;
+              margin-bottom: 30px;
+            }
+            .header h1 {
+              color: #8B0000;
+              margin: 0 0 5px 0;
+              font-size: 28px;
+            }
+            .header p {
+              color: #666;
+              margin: 0;
+              font-size: 14px;
+            }
+            .section {
+              margin-bottom: 30px;
+              page-break-inside: avoid;
+            }
+            .section-title {
+              color: #8B0000;
+              font-size: 20px;
+              font-weight: bold;
+              margin-bottom: 15px;
+              border-bottom: 2px solid #FFE4E1;
+              padding-bottom: 8px;
+            }
+            .summary-grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 15px;
+              margin-bottom: 20px;
+            }
+            .summary-item {
+              padding: 12px;
+              border: 1px solid #ddd;
+              border-radius: 5px;
+              background: #f9f9f9;
+            }
+            .summary-item strong {
+              color: #8B0000;
+              display: block;
+              margin-bottom: 5px;
+            }
+            .parameters-table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 15px;
+            }
+            .parameters-table th {
+              background: #8B0000;
+              color: white;
+              padding: 12px;
+              text-align: left;
+              font-weight: bold;
+            }
+            .parameters-table td {
+              padding: 10px 12px;
+              border-bottom: 1px solid #ddd;
+            }
+            .parameters-table tr:nth-child(even) {
+              background: #f9f9f9;
+            }
+            .status-badge {
+              display: inline-block;
+              padding: 4px 10px;
+              border-radius: 12px;
+              font-size: 12px;
+              font-weight: bold;
+            }
+            .status-normal { background: #d4edda; color: #155724; }
+            .status-abnormal { background: #fff3cd; color: #856404; }
+            .status-critical { background: #f8d7da; color: #721c24; }
+            .conditions-list {
+              list-style: none;
+              padding: 0;
+            }
+            .conditions-list li {
+              padding: 10px;
+              margin-bottom: 8px;
+              border-left: 4px solid #8B0000;
+              background: #fff8f8;
+            }
+            .recommendations {
+              background: #f0f8ff;
+              padding: 15px;
+              border-left: 4px solid #3B82F6;
+              margin-top: 15px;
+            }
+            .recommendations h4 {
+              color: #1e40af;
+              margin-top: 0;
+            }
+            .recommendations ul {
+              margin: 10px 0;
+              padding-left: 20px;
+            }
+            .disclaimer {
+              margin-top: 40px;
+              padding: 15px;
+              background: #fff3cd;
+              border: 1px solid #ffc107;
+              border-radius: 5px;
+              font-size: 12px;
+              color: #856404;
+            }
+            .footer {
+              margin-top: 40px;
+              padding-top: 20px;
+              border-top: 1px solid #ddd;
+              text-align: center;
+              color: #666;
+              font-size: 12px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Health Monitoring Hub - CBC Analysis Report</h1>
+            <p>Generated on ${currentDate}</p>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Overall Summary</div>
+            <div class="summary-grid">
+              <div class="summary-item">
+                <strong>Overall Status:</strong>
+                <span class="status-badge status-${analysis.overallSeverity}">
+                  ${analysis.overallSeverity.toUpperCase()}
+                </span>
+              </div>
+              <div class="summary-item">
+                <strong>Normal Parameters:</strong> ${analysis.normalCount}
+              </div>
+              <div class="summary-item">
+                <strong>Abnormal Parameters:</strong> ${analysis.abnormalCount}
+              </div>
+              <div class="summary-item">
+                <strong>Critical Parameters:</strong> ${analysis.criticalCount}
+              </div>
+            </div>
+            ${analysis.summary ? `<p style="margin-top: 15px; line-height: 1.6;">${analysis.summary}</p>` : ''}
+          </div>
+
+          <div class="section">
+            <div class="section-title">CBC Parameters Analysis</div>
+            <table class="parameters-table">
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Value</th>
+                  <th>Reference Range</th>
+                  <th>Status</th>
+                  <th>Flag</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${Object.entries(analysis.parameters)
+                  .map(([key, param]) => `
+                    <tr>
+                      <td><strong>${param.label || key.toUpperCase()}</strong></td>
+                      <td>${param.value} ${param.unit || ''}</td>
+                      <td>${param.referenceRange.min} - ${param.referenceRange.max} ${param.unit || ''}</td>
+                      <td>
+                        <span class="status-badge status-${param.severity}">
+                          ${param.severity.toUpperCase()}
+                        </span>
+                      </td>
+                      <td><strong>${param.flag}</strong></td>
+                    </tr>
+                  `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          ${analysis.detectedConditions && analysis.detectedConditions.length > 0 ? `
+          <div class="section">
+            <div class="section-title">Detected Conditions</div>
+            <ul class="conditions-list">
+              ${analysis.detectedConditions.map(cond => `
+                <li>
+                  <strong>${cond.condition}</strong>
+                  ${cond.severity ? ` - ${cond.severity.toUpperCase()}` : ''}
+                  ${cond.description ? `<br><small>${cond.description}</small>` : ''}
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+          ` : ''}
+
+          ${openAIResponse ? `
+          <div class="section">
+            <div class="section-title">AI-Powered Recommendations</div>
+            ${openAIResponse.dietaryRecommendations && openAIResponse.dietaryRecommendations.length > 0 ? `
+              <div class="recommendations">
+                <h4>Dietary Recommendations</h4>
+                <ul>
+                  ${openAIResponse.dietaryRecommendations.map(rec => `<li>${rec}</li>`).join('')}
+                </ul>
+              </div>
+            ` : ''}
+            ${openAIResponse.lifestyleSuggestions && openAIResponse.lifestyleSuggestions.length > 0 ? `
+              <div class="recommendations">
+                <h4>Lifestyle Suggestions</h4>
+                <ul>
+                  ${openAIResponse.lifestyleSuggestions.map(sug => `<li>${sug}</li>`).join('')}
+                </ul>
+              </div>
+            ` : ''}
+            ${openAIResponse.possibleMedications && openAIResponse.possibleMedications.length > 0 ? `
+              <div class="recommendations">
+                <h4>Possible Medications (Informational Only)</h4>
+                <ul>
+                  ${openAIResponse.possibleMedications.map(med => `<li>${med}</li>`).join('')}
+                </ul>
+              </div>
+            ` : ''}
+          </div>
+          ` : ''}
+
+          <div class="disclaimer">
+            <strong>⚠️ DISCLAIMER:</strong> This analysis is for informational and educational purposes only. 
+            It is NOT a substitute for professional medical advice, diagnosis, or treatment. 
+            Always seek the advice of your physician or other qualified health provider with any questions 
+            you may have regarding a medical condition.
+          </div>
+
+          <div class="footer">
+            <p>Health Monitoring Hub - AI-Powered CBC Analysis</p>
+            <p>Report ID: ${reportId || 'N/A'} | Generated: ${currentDate}</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(printHTML);
+    printWindow.document.close();
+
+    // Wait for content to load, then trigger print
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      // Close window after printing (optional)
+      // printWindow.close();
+    }, 250);
   };
 
   return (
@@ -383,11 +676,8 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
                     <div className="space-y-2">
                       {analysis.detectedConditions.map((condition, index) => (
                         <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                          <div className="flex justify-between items-center mb-1">
+                        <div className="flex justify-between items-center mb-1">
                             <span className="font-semibold text-red-800">{condition.name}</span>
-                            <span className="text-sm bg-red-100 text-red-800 px-2 py-1 rounded">
-                              {(condition.confidence * 100).toFixed(0)}% confidence
-                            </span>
                           </div>
                           <p className="text-sm text-red-700">{condition.description}</p>
                 </div>
@@ -397,6 +687,72 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
                 )}
               </CardContent>
             </Card>
+
+            {/* ML Diagnosis (model output from Python service) */}
+            {mlResult && (
+              <Card className="shadow-lg border border-indigo-200">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-indigo-800">
+                        <i className="fas fa-brain"></i>
+                        ML Diagnosis
+                      </CardTitle>
+                      <CardDescription>
+                        Output from trained CBC model (severity and top predictions)
+                      </CardDescription>
+                    </div>
+                    <div className="px-3 py-1 rounded-full text-sm font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                      {mlResult.severity ? mlResult.severity.toUpperCase() : 'N/A'}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-lg bg-indigo-50 border border-indigo-200">
+                      <h4 className="font-semibold text-indigo-800 mb-1">Model Severity</h4>
+                      <p className="text-2xl font-bold text-indigo-900">
+                        {mlResult.severity ? mlResult.severity.toUpperCase() : 'N/A'}
+                      </p>
+                      {typeof mlResult.confidence === 'number' && (
+                        <p className="text-sm text-indigo-700 mt-1">
+                          Confidence: {(mlResult.confidence * 100).toFixed(0)}%
+                        </p>
+                      )}
+                    </div>
+                    <div className="md:col-span-2 p-4 rounded-lg bg-white border border-gray-200">
+                      <h4 className="font-semibold text-gray-900 mb-2">Top Model Predictions</h4>
+                      {mlResult.predictions && Object.keys(mlResult.predictions).length > 0 ? (
+                        <ul className="space-y-1">
+                          {Object.entries(mlResult.predictions)
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 3)
+                            .map(([label, prob], idx) => (
+                              <li key={label} className="flex items-center justify-between text-sm">
+                                <span className="text-gray-800">
+                                  {idx + 1}. {label}
+                                </span>
+                                <span className="font-semibold text-indigo-700">
+                                  {(prob * 100).toFixed(1)}%
+                                </span>
+                              </li>
+                            ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-gray-600">
+                          No prediction breakdown available for this analysis.
+                        </p>
+                      )}
+                      {mlResult.note && (
+                        <p className="text-xs text-gray-500 mt-2">
+                          {mlResult.note}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Parameter Details */}
             <Card className="shadow-lg">

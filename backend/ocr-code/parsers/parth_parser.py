@@ -140,21 +140,36 @@ def parse_parth_format(texts):
         
         # Parse PLATELET COUNT
         elif "PLATELET COUNT" in text:
-            i += 1
-            if i < len(texts) and texts[i].startswith(":"):
-                value_text = texts[i].replace(":", "").strip()
-                unit = texts[i + 1] if i + 1 < len(texts) else ""
-                ref_range = texts[i + 2] if i + 2 < len(texts) else ""
-                
+            # Some PARTH reports print the platelet value *above* the "PLATELET COUNT" label,
+            # e.g. ": 1.28", "Lakhs /cmm", "1.5-4.5", "PLATELET COUNT"
+            value_text = None
+            unit = ""
+            ref_range = ""
+
+            # First, try the straightforward "label then : value" pattern
+            if i + 1 < len(texts) and texts[i + 1].startswith(":"):
+                value_text = texts[i + 1].replace(":", "").strip()
+                unit = texts[i + 2] if i + 2 < len(texts) else ""
+                ref_range = texts[i + 3] if i + 3 < len(texts) else ""
+                i += 4
+            else:
+                # Fallback: look a few lines *above* for ": value" and its unit/range
+                search_start = max(0, i - 5)
+                for idx in range(i - 1, search_start - 1, -1):
+                    if texts[idx].startswith(":"):
+                        value_text = texts[idx].replace(":", "").strip()
+                        unit = texts[idx + 1] if idx + 1 < len(texts) else ""
+                        ref_range = texts[idx + 2] if idx + 2 < len(texts) else ""
+                        break
+                i += 1
+
+            if value_text is not None:
                 parsed_data["haematology_report"].append({
                     "test_name": "PLATELET COUNT",
                     "observed_value": value_text,
                     "unit": unit,
                     "reference_range": ref_range
                 })
-                i += 3
-            else:
-                i += 1
         
         # Parse BLOOD INDICES
         elif "BLOOD INDICES" in text:

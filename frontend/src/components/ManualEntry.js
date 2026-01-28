@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 
 function ManualEntry({ onDataSubmit }) {
   const [formData, setFormData] = useState({
@@ -40,7 +40,7 @@ function ManualEntry({ onDataSubmit }) {
     setSubmitting(true);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/reports', {
+      const response = await api.post('/reports', {
         cbcData: formData
       });
 

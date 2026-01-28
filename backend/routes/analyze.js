@@ -4,14 +4,16 @@ const { detectConditions } = require('../services/conditionDetection');
 const { getSuggestions } = require('../services/openAIService');
 const { query } = require('../config/database');
 const axios = require('axios');
+const authenticate = require('../middleware/auth');
 
 const router = express.Router();
 
 /**
  * POST /api/analyze
  * Analyze CBC values using rule-based detection and ML service
+ * Requires authentication
  */
-router.post('/', async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   try {
     const { cbcData, reportId, gender } = req.body;
 
@@ -23,13 +25,16 @@ router.post('/', async (req, res) => {
     }
 
     // Validate required fields
+    // For strict validation (e.g., when saving a full report) we want all core CBC fields,
+    // but for AI analysis we can still proceed if some are missing.
     const requiredFields = ['hemoglobin', 'rbc', 'wbc', 'platelets'];
-    const missingFields = requiredFields.filter(field => !cbcData[field]);
-    
-    if (missingFields.length > 0) {
+    const missingFields = requiredFields.filter(field => cbcData[field] === undefined || cbcData[field] === null || cbcData[field] === '');
+
+    // Only block completely empty/invalid payloads; otherwise, log a warning and continue
+    if (missingFields.length === requiredFields.length) {
       return res.status(400).json({
         error: 'Missing required fields',
-        message: `The following fields are required: ${missingFields.join(', ')}`,
+        message: `At least one of the core CBC fields (${requiredFields.join(', ')}) is required for analysis.`,
         missingFields
       });
     }

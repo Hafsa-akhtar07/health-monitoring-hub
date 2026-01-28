@@ -1,27 +1,28 @@
 /**
- * OpenAI Service
+ * LLM Suggestion Service (Mistral-based)
  * Provides diet and medication suggestions based on CBC analysis
  */
 
 const axios = require('axios');
 
 /**
- * Get diet and medication suggestions from OpenAI
+ * Get diet and medication suggestions from an LLM (Mistral API)
  * @param {Array} conditions - Detected conditions
  * @param {Object} cbcData - CBC data
  * @param {string} gender - Patient gender
  * @returns {Promise<Object>} Suggestions with diet and medication recommendations
  */
 const getSuggestions = async (conditions, cbcData, gender = null) => {
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Prefer Mistral API; fall back to mock if no key
+  const mistralApiKey = process.env.MISTRAL_API_KEY;
 
-  // If no key configured, fall back to mock suggestions
-  if (!apiKey) {
+  if (!mistralApiKey) {
+    // No LLM configured – use rule-based mock suggestions
     return getMockSuggestions(conditions);
   }
 
   try {
-    // Build prompt for OpenAI
+    // Build prompt text
     const conditionNames = conditions.map(c => c.condition).join(', ');
     const abnormalParams = Object.entries(cbcData)
       .filter(([key, value]) => 
@@ -52,15 +53,17 @@ Format your response as JSON with this structure:
 }
 
 IMPORTANT: Always include a strong disclaimer that this is for informational purposes only and not a substitute for professional medical advice.`;
-
+ 
     const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
+      'https://api.mistral.ai/v1/chat/completions',
       {
-        model: 'gpt-3.5-turbo',
+        // You can switch to another deployed model here if needed
+        model: process.env.MISTRAL_MODEL_ID || 'mistral-small-latest',
         messages: [
           {
             role: 'system',
-            content: 'You are a helpful medical assistant. Always include disclaimers that your advice is informational and not a substitute for professional medical care.'
+            content:
+              'You are a helpful medical assistant. Always include disclaimers that your advice is informational and not a substitute for professional medical care.'
           },
           {
             role: 'user',
@@ -72,23 +75,23 @@ IMPORTANT: Always include a strong disclaimer that this is for informational pur
       },
       {
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${mistralApiKey}`,
           'Content-Type': 'application/json'
         },
         timeout: 30000 // 30 second timeout
       }
     );
 
-    const content = response.data.choices[0].message.content;
-    
-    // Try to parse JSON from response
+    const content = response.data.choices?.[0]?.message?.content || '';
+
+    // Try to extract JSON from the LLM response
     try {
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0]);
       }
     } catch (parseError) {
-      console.warn('Failed to parse OpenAI JSON response, using text format');
+      console.warn('Failed to parse Mistral JSON response, using text format');
     }
 
     // Fallback: return structured text response
@@ -97,13 +100,13 @@ IMPORTANT: Always include a strong disclaimer that this is for informational pur
       lifestyleSuggestions: [],
       possibleMedications: [],
       whenToConsultDoctor: 'Consult a healthcare provider for proper diagnosis and treatment.',
-      disclaimer: 'This information is for educational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment.',
+      disclaimer:
+        'This information is for educational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment.',
       rawResponse: content
     };
-
   } catch (error) {
-    console.error('OpenAI API error:', error.message);
-    // Fallback to mock suggestions
+    console.error('Mistral API error:', error.message);
+    // Fallback to mock suggestions if LLM fails
     return getMockSuggestions(conditions);
   }
 };

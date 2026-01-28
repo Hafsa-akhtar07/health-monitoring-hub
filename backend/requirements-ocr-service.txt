@@ -3,3 +3,9 @@ flask-cors
 opencv-python
 werkzeug
 
+
+
+
+
+
+

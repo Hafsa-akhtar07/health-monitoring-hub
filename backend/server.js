@@ -6,6 +6,7 @@ const reportRoutes = require('./routes/reports');
 const analyzeRoutes = require('./routes/analyze');
 const historyRoutes = require('./routes/history');
 const proxyRoutes = require('./routes/proxy');
+const authRoutes = require('./routes/auth');
 const { initializeDatabase } = require('./config/database');
 
 dotenv.config();
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
+app.use('/api/auth', authRoutes); // Authentication routes (register, login, me)
 app.use('/api/upload', uploadRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/analyze', analyzeRoutes);
@@ -41,6 +43,7 @@ app.get('/', (req, res) => {
     version: '1.0.0',
       endpoints: {
         health: '/health',
+        auth: '/api/auth',
         upload: '/api/upload',
         reports: '/api/reports',
         analyze: '/api/analyze',

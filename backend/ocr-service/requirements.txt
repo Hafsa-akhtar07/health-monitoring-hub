@@ -5,3 +5,12 @@ numpy
 paddlepaddle
 paddleocr
 
+
+
+
+
+
+
+
+
+

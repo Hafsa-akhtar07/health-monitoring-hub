@@ -6,6 +6,8 @@ const axios = require('axios');
 const FormData = require('form-data');
 const { validateExtractedData } = require('../services/ocrService');
 const { query } = require('../config/database');
+const authenticate = require('../middleware/auth');
+const { logError, logSuccess } = require('../services/logger');
 
 const router = express.Router();
 
@@ -66,6 +68,14 @@ async function callPythonOCRService(imagePath, originalFilename) {
     if (response.data && response.data.success) {
       console.log(`✅ Python OCR service successful: ${response.data.total_detections} text detections`);
       
+      // Log success to logger
+      logSuccess(originalFilename, {
+        accuracy_percentage: response.data.accuracy_percentage,
+        total_detections: response.data.total_detections,
+        average_confidence: response.data.average_confidence,
+        duration_seconds: response.data.duration_seconds
+      });
+      
       // Log the full JSON result to console with accuracy
       console.log('\n' + '='.repeat(80));
       console.log('📊 OCR EXTRACTION RESULT (JSON)');
@@ -98,10 +108,19 @@ async function callPythonOCRService(imagePath, originalFilename) {
     
   } catch (error) {
     if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      const errorMsg = 'Python OCR service is not running. Please start it: cd backend/ocr-service && python app.py';
       console.error('❌ Python OCR service not available:', error.message);
-      throw new Error('Python OCR service is not running. Please start it: cd backend/ocr-service && python app.py');
+      logError('ocr_error', originalFilename, errorMsg, {
+        error_code: error.code,
+        error_message: error.message
+      });
+      throw new Error(errorMsg);
     }
     console.error('❌ Python OCR service error:', error.message);
+    logError('ocr_error', originalFilename, error.message, {
+      error_code: error.code,
+      error_stack: error.stack
+    });
     throw error;
   }
 }
@@ -178,7 +197,9 @@ function parseCBCValues(ocrResult) {
       /(?:platelets?|plt|platelet\s*count|thrombocytes)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*(?:×?10³\/µl|k\/µl|k\/ul|per\s*µl)?\s*(?:platelets|plt)/gi,
       /platelets?[\s:]*(\d+\.?\d*)/gi,
-      /plt[\s:]*(\d+\.?\d*)/gi
+      /plt[\s:]*(\d+\.?\d*)/gi,
+      // Fallback for PARTH-style format: "Basophils : 1.28 Lakhs /cmm ... PLATELET COUNT"
+      /(\d+\.?\d*)\s*lakhs?\s*\/cmm[^\n]*platelet\s*count/gi
     ],
     rbc: [
       /(?:r\.?\s*b\.?\s*c\.?|rbc|red\s*blood\s*cells?|total\s*r\.?\s*b\.?\s*c\.?|erythrocytes)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
@@ -242,8 +263,13 @@ function parseCBCValues(ocrResult) {
                 continue;
               }
           } else if (key === 'platelets') {
-            // Platelets: if value is < 100, it's likely in ×10³/µL format
-            if (value < 100 && value > 10) {
+            // Platelets: handle values reported in ×10³/µL or Lakhs/cmm
+            if (textLower.includes('lakhs /cmm') || textLower.includes('lakh /cmm')) {
+              // e.g., "1.28 Lakhs /cmm" → 128000
+              values[key] = value * 100000;
+              console.log(`✅ Found ${key}: ${value} Lakhs/cmm → ${values[key]}`);
+            } else if (value < 100 && value > 10) {
+              // Likely ×10³/µL
               values[key] = value * 1000;
               console.log(`✅ Found ${key}: ${value} → ${values[key]} (converted from ×10³/µL)`);
             } else {
@@ -271,8 +297,9 @@ function parseCBCValues(ocrResult) {
 /**
  * POST /api/upload
  * Upload CBC report image/PDF and extract values via Baidu PaddleOCR
+ * Requires authentication
  */
-router.post('/', upload.single('file'), async (req, res) => {
+router.post('/', authenticate, upload.single('file'), async (req, res) => {
   let filePath = null;
   
   try {
@@ -334,6 +361,14 @@ router.post('/', upload.single('file'), async (req, res) => {
     } catch (ocrError) {
       console.error('❌ OCR extraction error:', ocrError.message);
       
+      // Log OCR error
+      logError('ocr_error', req.file?.originalname || 'unknown', ocrError.message, {
+        error_type: ocrError.name,
+        error_code: ocrError.code,
+        file_size: req.file?.size,
+        file_mimetype: req.file?.mimetype
+      });
+      
       if (ocrError.message.includes('not running')) {
         return res.status(503).json({
           error: 'OCR service unavailable',
@@ -367,6 +402,14 @@ router.post('/', upload.single('file'), async (req, res) => {
     // Warnings are acceptable - user can manually enter missing values
     if (!validation.isValid && validation.errors.length > 0) {
       console.log('❌ Validation failed with errors:', validation.errors);
+      
+      // Log validation error
+      logError('validation_error', req.file?.originalname || 'unknown', 'Validation failed', {
+        errors: validation.errors,
+        warnings: validation.warnings,
+        extracted_keys: Object.keys(extractedData)
+      });
+      
       return res.status(400).json({
         error: 'Invalid extracted data',
         message: 'Could not extract data from the file',
@@ -402,17 +445,17 @@ router.post('/', upload.single('file'), async (req, res) => {
     });
     console.log('='.repeat(80) + '\n');
 
-    // Save report to database
+    // Save report to database (with authenticated user ID)
     let reportId;
     try {
       const result = await query(
-        `INSERT INTO reports (filename, file_path, extracted_data, created_at)
-         VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+        `INSERT INTO reports (user_id, filename, file_path, extracted_data, created_at)
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
          RETURNING id`,
-        [req.file.originalname, filePath, JSON.stringify(extractedData)]
+        [req.user.id, req.file.originalname, filePath, JSON.stringify(extractedData)]
       );
       reportId = result.rows[0].id;
-      console.log(`✅ Report saved to database with ID: ${reportId}`);
+      console.log(`✅ Report saved to database with ID: ${reportId} for user ${req.user.id}`);
     } catch (dbError) {
       console.error('Database error:', dbError);
       return res.status(500).json({
