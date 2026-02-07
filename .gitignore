@@ -40,7 +40,10 @@ build/
 # Exclude markdown files
 *.md
 
-# Python virtual environment
+# Python
+__pycache__/
+*.pyc
+.venv/
 ml-service/.venv/
 
 # Allow backend lock file for CI
