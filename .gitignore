@@ -38,4 +38,4 @@ build/
 *.min.css
 
 # Exclude all markdown files
-*.md
+*.mdml-service/.venv/
