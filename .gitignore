@@ -37,5 +37,11 @@ build/
 *.min.js
 *.min.css
 
-# Exclude all markdown files
-*.mdml-service/.venv/
+# Exclude markdown files
+*.md
+
+# Python virtual environment
+ml-service/.venv/
+
+# Allow backend lock file for CI
+!backend/package-lock.json
