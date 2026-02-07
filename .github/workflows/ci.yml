@@ -33,8 +33,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          # Use Node 18 to match local dev environment; no caching to avoid path issues
-          node-version: '18'
+          node-version: '22'
 
       - name: Install backend dependencies
         working-directory: ./backend
@@ -77,8 +76,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          # Use Node 18 to match local dev environment; no caching to avoid path issues
-          node-version: '18'
+          node-version: '22'
 
       - name: Install frontend dependencies
         working-directory: ./frontend
