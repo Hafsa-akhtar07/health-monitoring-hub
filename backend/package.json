@@ -4,6 +4,8 @@
   "description": "Health Monitoring Hub - Backend API",
   "main": "server.js",
   "scripts": {
+    "build": "node -e \"console.log('Backend build: no compile step (Express).');\"",
+    "serve": "npm run build && npm start",
     "start": "node server.js",
     "dev": "nodemon server.js",
     "seed": "node database/seed.js",

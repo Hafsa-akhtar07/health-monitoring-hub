@@ -3,25 +3,40 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-function shouldUseSsl(connectionString) {
-  if (!connectionString) return false;
-  const cs = String(connectionString);
-  return (
-    cs.includes('sslmode=require') ||
-    cs.includes('neon.tech') ||
-    cs.includes('render.com') ||
-    cs.includes('azure.com')
-  );
+// Neon / managed Postgres: must use connectionString + ssl (Neon does not accept non-SSL the same way).
+const rawDatabaseUrl = process.env.DATABASE_URL?.trim();
+
+/**
+ * node-postgres + Neon: short client timeouts (default) often cause
+ * "Connection terminated due to connection timeout" on slow / long routes.
+ * channel_binding=require can also confuse some pg versions — Neon works fine without it.
+ */
+function normalizeRemoteDatabaseUrl(url) {
+  if (!url) return url;
+  try {
+    const u = new URL(url);
+    u.searchParams.delete('channel_binding');
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
 
-// Priority: DATABASE_URL (Neon / cloud) then DB_* (local)
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = normalizeRemoteDatabaseUrl(rawDatabaseUrl);
+
 const poolConfig = databaseUrl
   ? {
       connectionString: databaseUrl,
-      ssl: shouldUseSsl(databaseUrl) ? { rejectUnauthorized: false } : undefined,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+      // Long haul / first connection to Neon needs more than 2s
+      connectionTimeoutMillis: 60000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
     }
   : {
+      // Fallback for local/CI when DATABASE_URL is not set (e.g. docker postgres + DB_* env vars)
       user: process.env.DB_USER || 'postgres',
       host: process.env.DB_HOST || 'localhost',
       database: process.env.DB_NAME || 'health_monitoring_hub',
@@ -34,7 +49,8 @@ const pool = new Pool({
   ...poolConfig,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  // Local / CI fallback: reasonable timeout for localhost Postgres
+  ...(databaseUrl ? {} : { connectionTimeoutMillis: 10000 }),
 });
 
 pool.on('connect', () => {
