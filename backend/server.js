@@ -98,8 +98,9 @@ const startServer = async () => {
     // Initialize database tables
     await initializeDatabase();
     
-    server.listen(PORT, () => {
-      console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    // Bind 0.0.0.0 so Azure App Service (and other containers) can route traffic.
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server is running on port ${PORT}`);
       console.log(`📋 Health check: http://localhost:${PORT}/health`);
       console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
       console.log('🔌 Socket.IO real-time updates enabled');
