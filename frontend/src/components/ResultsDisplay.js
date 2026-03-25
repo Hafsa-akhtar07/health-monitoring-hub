@@ -11,6 +11,7 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
   const [openAIResponse, setOpenAIResponse] = useState(null);
   const [openAILoading, setOpenAILoading] = useState(false);
   const [mlResult, setMlResult] = useState(null); // backend ML model output
+  const [analysisWarnings, setAnalysisWarnings] = useState([]);
   const hasAnalyzed = useRef(false);
 
   const referenceRanges = {
@@ -184,6 +185,7 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
       if (backendAnalysis?.ml) {
         setMlResult(backendAnalysis.ml);
       }
+      setAnalysisWarnings(response.data?.warnings || []);
 
       const suggestions = backendAnalysis?.suggestions;
       if (suggestions) {
@@ -206,6 +208,7 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
       console.error('OpenAI recommendations error:', error.response?.data || error.message);
       setMlResult(null);
       setOpenAIResponse(null);
+      setAnalysisWarnings([]);
     } finally {
       setOpenAILoading(false);
     }
@@ -723,6 +726,13 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {analysisWarnings.length > 0 && (
+                    <Alert className="mb-4 border-amber-200 bg-amber-50">
+                      <AlertDescription>
+                        {analysisWarnings.join(' ')}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="p-4 rounded-lg bg-indigo-50 border border-indigo-200">
                       <h4 className="font-semibold text-indigo-800 mb-1">Model Severity</h4>
@@ -730,7 +740,20 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
                         {mlResult.severity ? mlResult.severity.toUpperCase() : 'N/A'}
                       </p>
                     </div>
-                    <div className="md:col-span-2 p-4 rounded-lg bg-white border border-gray-200">
+                    <div className="p-4 rounded-lg bg-indigo-50 border border-indigo-200">
+                      <h4 className="font-semibold text-indigo-800 mb-1">Model Used</h4>
+                      <p className="text-sm font-medium text-indigo-900 break-all">
+                        {mlResult.usedModel || 'N/A'}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-lg bg-indigo-50 border border-indigo-200">
+                      <h4 className="font-semibold text-indigo-800 mb-1">Confidence</h4>
+                      <p className="text-2xl font-bold text-indigo-900">
+                        {mlResult.confidence != null ? (mlResult.confidence * 100).toFixed(1) + '%' : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 p-4 rounded-lg bg-white border border-gray-200">
                       <h4 className="font-semibold text-gray-900 mb-2">Top Model Predictions</h4>
                       {mlResult.predictions && Object.keys(mlResult.predictions).length > 0 ? (
                         <ul className="space-y-1">
@@ -754,7 +777,6 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
                         </p>
                       )}
                     </div>
-                  </div>
                 </CardContent>
               </Card>
             )}

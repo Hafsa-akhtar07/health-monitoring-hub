@@ -9,6 +9,7 @@ const analyzeRoutes = require('./routes/analyze');
 const historyRoutes = require('./routes/history');
 const proxyRoutes = require('./routes/proxy');
 const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
 const { initializeDatabase } = require('./config/database');
 
 dotenv.config();
@@ -46,6 +47,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/analyze', analyzeRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/proxy', proxyRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -67,7 +69,8 @@ app.get('/', (req, res) => {
         upload: '/api/upload',
         reports: '/api/reports',
         analyze: '/api/analyze',
-        history: '/api/history'
+        history: '/api/history',
+        admin: '/api/admin'
       }
   });
 });

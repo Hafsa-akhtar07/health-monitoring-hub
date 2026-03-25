@@ -107,9 +107,38 @@ function getRecentErrors(limit = 50) {
   }
 }
 
+/**
+ * Total number of OCR error entries in the log file (for admin stats).
+ */
+function countOcrErrorEntries() {
+  const logFile = path.join(logsDir, 'ocr-errors.log');
+  if (!fs.existsSync(logFile)) {
+    return 0;
+  }
+  try {
+    const content = fs.readFileSync(logFile, 'utf8');
+    return content
+      .trim()
+      .split('\n')
+      .filter((line) => line.trim())
+      .filter((line) => {
+        try {
+          JSON.parse(line);
+          return true;
+        } catch {
+          return false;
+        }
+      }).length;
+  } catch (error) {
+    console.error('Error counting OCR log entries:', error);
+    return 0;
+  }
+}
+
 module.exports = {
   logError,
   logSuccess,
-  getRecentErrors
+  getRecentErrors,
+  countOcrErrorEntries
 };
 

@@ -88,7 +88,18 @@ def matches_field(text: str, field_keywords: List[str]) -> bool:
     """Check if text matches any of the field keywords."""
     normalized = normalize_text(text)
     for keyword in field_keywords:
-        if keyword in normalized:
+        if not keyword:
+            continue
+        # Punctuation / symbols (e.g. @) — substring is fine
+        if len(keyword) == 1 or not keyword[0].isalnum():
+            if keyword in normalized:
+                return True
+            continue
+        # Short keywords: use word boundaries so "tel" does not match inside "platelets"
+        if len(keyword) <= 3:
+            if re.search(r'\b' + re.escape(keyword) + r'\b', normalized):
+                return True
+        elif keyword in normalized:
             return True
     return False
 
@@ -129,7 +140,20 @@ def is_number(text: str) -> bool:
     if not text:
         return False
     # Remove common units and check
-    cleaned = text.replace('g/dl', '').replace('%', '').replace('fl', '').replace('pg', '').strip()
+    cleaned = normalize_text(text)
+    # Common unit spellings seen in reports
+    cleaned = (
+        cleaned.replace('gm/dl', '')
+        .replace('g/dl', '')
+        .replace('g/l', '')
+        .replace('%', '')
+        .replace('fl', '')
+        .replace('pg', '')
+        .strip()
+    )
+    # Drop scientific / count style unit tails if present
+    cleaned = re.sub(r'x\s*10(\^?\d+|e\d+)\s*/\s*l', '', cleaned)
+    cleaned = cleaned.replace('/ul', '').replace('/µl', '').replace('/cumm', '').replace('/l', '').strip()
     try:
         float(cleaned)
         return True
@@ -155,10 +179,162 @@ def is_unit(text: str) -> bool:
     """Check if text looks like a unit."""
     if not text:
         return False
+    # NEUTROPHILS%, LYMPHOCYTES%, etc. contain '%' but are test names, not units
+    if is_test_name(text):
+        return False
     normalized = normalize_text(text)
-    units = ['g/dl', 'g/l', '%', 'fl', 'pg', '/ul', '/cumm', '/l', 'million/ul', 
-             'x103', 'x10^3', 'cells/ul', 'lakhs', 'cmm', 'mill/cumm']
-    return any(unit in normalized for unit in units)
+    units = [
+        'g/dl', 'gm/dl', 'g/l', '%', 'fl', 'pg',
+        '/ul', '/µl', '/cumm', '/l',
+        'million/ul', 'cells/ul', 'cmm', 'lakhs', 'mill/cumm',
+        'x103', 'x10^3'
+    ]
+    if any(unit in normalized for unit in units):
+        return True
+    # x10^9/L, x 10^12/L, x10e9/L, etc.
+    if re.search(r'x\s*10(\^?\d+|e\d+)\s*/\s*l', normalized):
+        return True
+    return False
+
+
+def split_value_and_unit(token: str) -> Optional[tuple]:
+    """
+    If token looks like '<number><unit>' or '<number> <unit>', return (value, unit).
+    Examples: '17.5 gm/dL', '51%', '5.8 x 10^12/L', '169 x10^9/L', '5.4 x 10e9/L'
+    """
+    if not token:
+        return None
+    t = token.strip()
+    if is_reference_range(t):
+        return None
+    # Don't treat pure test names as value+unit
+    if is_test_name(t) and not is_number(t):
+        return None
+
+    # Find first numeric value
+    m = re.search(r'(\d+\.?\d*)', t)
+    if not m:
+        return None
+    value = m.group(1)
+    unit_part = t[m.end():].strip()
+    if not unit_part:
+        return None
+    # If unit_part is just another number, skip
+    if is_number(unit_part) and not is_unit(unit_part):
+        return None
+    # Accept if unit_part looks like a unit
+    if is_unit(unit_part) or is_unit(t):
+        # Prefer compact unit extraction for % stuck to number
+        if '%' in t:
+            return value, '%'
+        return value, unit_part
+    return None
+
+
+def _numeric_token_value(text: str) -> Optional[float]:
+    """Parse a leading number from a token (handles '07', '49%', etc.)."""
+    if not text:
+        return None
+    m = re.search(r'(\d+\.?\d*)', text.replace(',', '.'))
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except ValueError:
+        return None
+
+
+def is_wbc_percent_differential_test(test_name: str) -> bool:
+    """
+    True for 5-part WBC differential % lines (not absolute counts).
+    These rows often appear after PLATELETS; OCR can leave the previous row's
+    ref-range bound (e.g. 400 from 150-400) as a stray number before the real %.
+    """
+    if not test_name or ':' in test_name:
+        return False
+    n = normalize_text(test_name)
+    if 'absolute' in n:
+        return False
+    for key in ('neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'):
+        for kw in COMMON_TEST_NAMES[key]:
+            if kw in n:
+                return True
+    return False
+
+
+def _parse_wbc_percent_differential_row(
+    texts: List[str], start_idx: int
+) -> Optional[tuple]:
+    """
+    Parse NEUTROPHILS% / LYMPHOCYTES% style rows: collect tokens until reference range
+    or next test, then read result from '%' neighbour or last plausible 0–100 value.
+    Returns (result_dict, next_index) or None.
+    """
+    test_name = texts[start_idx].strip()
+    result: Dict[str, Any] = {
+        'test_name': test_name,
+        'observed_value': '',
+        'unit': '%',
+        'reference_range': ''
+    }
+    i = start_idx + 1
+    tokens_before_ref: List[str] = []
+    seen_ref = False
+
+    while i < min(start_idx + 14, len(texts)):
+        t = texts[i].strip()
+        if not t or t in [':', '.', '"', "'"]:
+            i += 1
+            continue
+        if is_reference_range(t):
+            result['reference_range'] = t
+            seen_ref = True
+            i += 1
+            break
+        # Next lab row started — do not consume its test name
+        if is_test_name(t) and i > start_idx + 1:
+            break
+        tokens_before_ref.append(t)
+        i += 1
+
+    observed = ''
+    for tok in tokens_before_ref:
+        if '%' in tok:
+            compact = re.sub(r'\s+', '', tok)
+            m = re.search(r'(\d+\.?\d*)\s*%', compact)
+            if m:
+                observed = m.group(1).lstrip('0') or '0'
+                if observed.startswith('.'):
+                    observed = '0' + observed
+                break
+    if not observed:
+        for j, tok in enumerate(tokens_before_ref):
+            if tok.strip() == '%' and j > 0:
+                prev = tokens_before_ref[j - 1].strip()
+                if is_number(prev) and not is_reference_range(prev):
+                    observed = prev.lstrip('0') or prev
+                    break
+
+    if not observed:
+        plausible: List[str] = []
+        for tok in tokens_before_ref:
+            if is_reference_range(tok):
+                continue
+            v = _numeric_token_value(tok)
+            if v is None:
+                continue
+            if 0 <= v <= 100 and is_number(tok):
+                plausible.append(tok)
+        if plausible:
+            pick = plausible[-1]
+            pv = _numeric_token_value(pick)
+            observed = str(int(pv)) if pv is not None and pv == int(pv) else (str(pv) if pv is not None else pick)
+
+    if not observed:
+        return None
+
+    result['observed_value'] = observed
+    return result, i
 
 
 def parse_test_result(texts: List[str], start_idx: int) -> Optional[Dict[str, Any]]:
@@ -170,17 +346,32 @@ def parse_test_result(texts: List[str], start_idx: int) -> Optional[Dict[str, An
         return None
     
     test_name = texts[start_idx].strip()
-    if not test_name or test_name in ['TEST DESCRIPTION', 'RESULT', 'REF. RANGE', 'UNIT', 
-                                       'Test Name', 'Observed Value', 'Reference Range',
-                                       'Investigation', 'Units', 'Biological Reference Interval']:
+    if not test_name or test_name.upper() in [
+        'TEST', 'TEST(S)', 'TEST DESCRIPTION',
+        'RESULT', 'RESULT(S)',
+        'REF. RANGE', 'REF. RANGE(S)',
+        'UNIT', 'UNIT(S)',
+        'TEST NAME', 'OBSERVED VALUE', 'OBSERVED VALUE(S)', 'REFERENCE RANGE', 'REFERENCE RANGE(S)',
+        'INVESTIGATION', 'UNITS', 'BIOLOGICAL REFERENCE INTERVAL'
+    ]:
         return None
     
     # Skip if it's a section header
     section_headers = ['HAEMATOLOGY', 'BLOOD INDICES', 'DIFFERENTIAL COUNT', 
                        'PLATELET COUNT', 'RBC INDICES', 'PLATELETS INDICES',
-                       'ABSOLUTE LEUCOCYTE COUNT', 'COMPLETE BLOOD COUNT']
+                       'ABSOLUTE LEUCOCYTE COUNT', 'COMPLETE BLOOD COUNT',
+                       'COMPLETE BLOOD PICTURE', 'CP (COMPLETE BLOOD PICTURE)']
     if any(header in test_name.upper() for header in section_headers):
         return None
+    
+    # WBC differential % rows: read tokens up to ref range / next test so we do not bind
+    # a stray prior-row bound (e.g. 400 from platelets 150-400) as the result.
+    if is_wbc_percent_differential_test(test_name):
+        spec = _parse_wbc_percent_differential_row(texts, start_idx)
+        if spec:
+            row, next_i = spec
+            row['_next_index'] = next_i
+            return row
     
     result = {
         'test_name': test_name,
@@ -208,16 +399,38 @@ def parse_test_result(texts: List[str], start_idx: int) -> Optional[Dict[str, An
     
     result['test_name'] = test_name
     
-    # Look ahead up to 5 items
-    while i < min(start_idx + 6, len(texts)) and (not found_value or not found_unit or not found_range):
+    # Look ahead up to 6 items total (including combined value+unit tokens)
+    while i < min(start_idx + 7, len(texts)) and (not found_value or not found_unit or not found_range):
         current = texts[i].strip()
         
         if not current or current in [':', '.', '"', "'"]:
             i += 1
             continue
+
+        # Handle combined value+unit tokens early (e.g., '17.5 gm/dL', '5.8 x 10^12/L', '51%')
+        if not found_value:
+            vu = split_value_and_unit(current)
+            if vu:
+                val_str, unit_str = vu
+                result['observed_value'] = val_str
+                found_value = True
+                if not found_unit and unit_str:
+                    result['unit'] = unit_str
+                    found_unit = True
+                i += 1
+                continue
         
         # Check for value (number)
         if not found_value and is_number(current) and not is_reference_range(current):
+            val_f = _numeric_token_value(current)
+            tn = result.get('test_name', test_name)
+            if (
+                is_wbc_percent_differential_test(tn)
+                and val_f is not None
+                and val_f > 100
+            ):
+                i += 1
+                continue
             result['observed_value'] = current
             found_value = True
             i += 1
@@ -246,7 +459,11 @@ def parse_test_result(texts: List[str], start_idx: int) -> Optional[Dict[str, An
         
         i += 1
     
-    # Only return if we have at least test name and value
+    # Provide a reliable resume point for the outer loop.
+    # This avoids misalignment when value+unit are in the same token.
+    result['_next_index'] = i
+
+    # Only return if we have at least test name and value (or a recognized test name)
     if result['test_name'] and (result['observed_value'] or is_test_name(result['test_name'])):
         return result
     
@@ -366,6 +583,7 @@ def parse_universal_format(texts: List[str]) -> Dict[str, Any]:
         # Parse test results
         test_result = parse_test_result(texts, i)
         if test_result:
+            next_i = test_result.pop('_next_index', None)
             test_name_lower = normalize_text(test_result['test_name'])
             
             # Determine if it's blood indices or haematology
@@ -387,15 +605,17 @@ def parse_universal_format(texts: List[str]) -> Dict[str, Any]:
             else:
                 parsed_data["haematology_report"].append(test_result)
             
-            # Advance index based on how many items we consumed
-            i += 1
-            # Skip the items we already parsed
-            if test_result['observed_value']:
+            if next_i is not None:
+                i = next_i
+            else:
+                # Advance index based on how many items we consumed
                 i += 1
-            if test_result['unit']:
-                i += 1
-            if test_result['reference_range']:
-                i += 1
+                if test_result['observed_value']:
+                    i += 1
+                if test_result['unit']:
+                    i += 1
+                if test_result['reference_range']:
+                    i += 1
             continue
         
         # Parse morphology
