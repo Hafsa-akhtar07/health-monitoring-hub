@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import api from '../utils/api';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
@@ -8,10 +8,14 @@ const AdminDashboard = () => {
   const [overview, setOverview] = useState(null);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [lastLogsRefreshAt, setLastLogsRefreshAt] = useState(null);
+  const refreshTimeoutRef = useRef(null);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchOverviewAndLogs = async ({ showLoading = true, preserveScroll = false } = {}) => {
+    const scrollY = preserveScroll ? window.scrollY : 0;
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const [overviewRes, logsRes] = await Promise.all([
@@ -28,19 +32,49 @@ const AdminDashboard = () => {
         'Failed to load admin dashboard data.';
       setError(message);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
+      if (preserveScroll) window.scrollTo(0, scrollY);
+    }
+  };
+
+  const fetchLogsOnly = async ({ preserveScroll = false } = {}) => {
+    const scrollY = preserveScroll ? window.scrollY : 0;
+    setError(null);
+    try {
+      const logsRes = await api.get('/admin/ocr-logs', { params: { limit: 50 } });
+      setLogs(logsRes.data?.logs || []);
+      setLastLogsRefreshAt(Date.now());
+    } catch (err) {
+      console.error('Admin logs error:', err);
+      const message =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        'Failed to refresh OCR logs.';
+      setError(message);
+    } finally {
+      if (preserveScroll) window.scrollTo(0, scrollY);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchOverviewAndLogs({ showLoading: true });
   }, []);
 
   // Refetch counts and logs when real-time events fire (report uploaded / analysis done)
   useEffect(() => {
-    const handler = () => fetchData();
+    const handler = () => {
+      // Debounce to avoid multiple rapid re-renders (and visible scroll jumps)
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = setTimeout(() => {
+        // Logs should update fast; the overview endpoint does a full log-file count
+        fetchLogsOnly({ preserveScroll: true });
+      }, 200);
+    };
     window.addEventListener('hmh:adminRefresh', handler);
-    return () => window.removeEventListener('hmh:adminRefresh', handler);
+    return () => {
+      window.removeEventListener('hmh:adminRefresh', handler);
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+    };
   }, []);
 
   const formatDateTime = (value) => {
@@ -53,13 +87,35 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-[#fff8f8] to-[#FFE4E1] p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="mb-4">
-          <h1 className="text-3xl md:text-4xl font-bold text-[#8B0000] mb-1">
-            Admin Dashboard
-          </h1>
-          <p className="text-gray-600">
-            Monitor system usage, recent activity, and OCR failures. Admins do not upload reports here.
-          </p>
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold text-[#8B0000] mb-1">
+              Admin Dashboard
+            </h1>
+            <p className="text-gray-600">
+              Monitor system usage, recent activity, and OCR failures. Admins do not upload reports here.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const scrollY = window.scrollY;
+              setRefreshing(true);
+              setError(null);
+              try {
+                await fetchOverviewAndLogs({ showLoading: false, preserveScroll: true });
+              } finally {
+                setRefreshing(false);
+                // Ensure we restore scroll even if fetchData errors.
+                window.scrollTo(0, scrollY);
+              }
+            }}
+            disabled={refreshing}
+          >
+            <i className={`mr-2 ${refreshing ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'}`}></i>
+            Refresh
+          </Button>
         </div>
 
         {error && (
@@ -140,27 +196,12 @@ const AdminDashboard = () => {
                     <CardDescription>
                       Inspect failed OCR uploads to improve parsers and handle edge cases.
                     </CardDescription>
+                    {lastLogsRefreshAt && (
+                      <div className="text-xs text-gray-500 mt-1">
+                        Updated: {new Date(lastLogsRefreshAt).toLocaleTimeString()}
+                      </div>
+                    )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      setLoading(true);
-                      setError(null);
-                      try {
-                        const logsRes = await api.get('/admin/ocr-logs', { params: { limit: 50 } });
-                        setLogs(logsRes.data?.logs || []);
-                      } catch (err) {
-                        console.error('Refresh logs error:', err);
-                        setError('Failed to refresh OCR logs.');
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                  >
-                    <i className="fas fa-sync-alt mr-2"></i>
-                    Refresh
-                  </Button>
                 </div>
               </CardHeader>
               <CardContent>

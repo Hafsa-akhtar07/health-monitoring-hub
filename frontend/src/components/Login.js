@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { authAPI } from '../utils/api';
+import { authStorage } from '../utils/authStorage';
 
 function Login({ onLoginSuccess, onSwitchToSignup, onBackToLanding }) {
   const [formData, setFormData] = useState({
@@ -49,9 +50,11 @@ function Login({ onLoginSuccess, onSwitchToSignup, onBackToLanding }) {
       });
 
       if (response.success && response.token && response.user) {
-        // Store token and user data in localStorage
-        localStorage.setItem('hmh_token', response.token);
-        localStorage.setItem('hmh_user', JSON.stringify(response.user));
+        // Store token/user in sessionStorage (per-tab), keep localStorage for backward compat
+        authStorage.setToken(response.token);
+        authStorage.setUser(response.user);
+        localStorage.setItem('hmh_token', response.token); // legacy
+        localStorage.setItem('hmh_user', JSON.stringify(response.user)); // legacy
 
         // Call success callback with user data
         if (onLoginSuccess) {

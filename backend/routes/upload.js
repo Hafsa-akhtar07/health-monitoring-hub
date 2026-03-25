@@ -110,17 +110,12 @@ async function callPythonOCRService(imagePath, originalFilename) {
     if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
       const errorMsg = 'Python OCR service is not running. Please start it: cd backend/ocr-service && python app.py';
       console.error('❌ Python OCR service not available:', error.message);
-      logError('ocr_error', originalFilename, errorMsg, {
-        error_code: error.code,
-        error_message: error.message
-      });
-      throw new Error(errorMsg);
+      // Let the outer upload handler log the OCR failure once.
+      const mappedError = new Error(errorMsg);
+      mappedError.code = error.code; // preserve axios error code for outer handler
+      throw mappedError;
     }
     console.error('❌ Python OCR service error:', error.message);
-    logError('ocr_error', originalFilename, error.message, {
-      error_code: error.code,
-      error_stack: error.stack
-    });
     throw error;
   }
 }

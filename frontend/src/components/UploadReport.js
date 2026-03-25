@@ -202,6 +202,13 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
         
         setError(errorMessage);
         setOcrProgress(0);
+
+      // Fallback refresh for Admin Dashboard:
+      // Socket.IO events can stop after repeated failures, but admin UI listens to this event.
+      // Dispatching here ensures logs update even when OCR service is down.
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('hmh:adminRefresh'));
+      }
     } finally {
         setIsProcessing(false);
     }
