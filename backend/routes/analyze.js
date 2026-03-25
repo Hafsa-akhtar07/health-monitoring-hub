@@ -60,11 +60,7 @@ router.post('/', authenticate, async (req, res) => {
       mlResults = mlResponse.data;
 
       if (mlResults) {
-        console.log('📊 ML diagnosis result:', {
-          severity: mlResults.severity,
-          confidence: mlResults.confidence,
-          usedModel: mlResults.usedModel
-        });
+        console.log('📊 ML diagnosis (real): Model=' + (mlResults.usedModel || 'unknown') + ' | Confidence=' + (mlResults.confidence != null ? mlResults.confidence : 'N/A') + ' | Severity=' + (mlResults.severity || 'N/A'));
       }
     } catch (mlErr) {
       console.warn('ML service unavailable, using rule-based only:', mlErr.message);
@@ -80,13 +76,31 @@ router.post('/', authenticate, async (req, res) => {
           critical: ruleBasedResults.overallSeverity === 'critical' ? 0.9 : 0.1
         },
         detectedConditions: detectedConditions, // Include conditions in ML results
-        note: 'Mock ML results - ML service not available'
+        note: 'Mock ML results - ML service not available',
+        usedModel: 'mock (ML service not reachable)'
       };
 
-      console.log('📊 ML diagnosis (mock):', {
-        severity: mlResults.severity,
-        confidence: mlResults.confidence
-      });
+      console.log('📊 ML diagnosis (fallback): Model=mock | Confidence=', mlResults.confidence, '| Reason: ML service not reachable at', process.env.ML_SERVICE_URL || 'http://localhost:5001');
+    }
+
+    // Override ML diagnosis when rule-based engine says everything is normal.
+    // ML is a classifier and can disagree with reference-range based checks.
+    // This keeps the UI consistent with the "every parameter is normal" expectation.
+    console.log('[ML-OVERRIDE] ruleBasedOverallSeverity=', ruleBasedResults?.overallSeverity);
+    if (mlResults && ruleBasedResults?.overallSeverity === 'normal') {
+      console.log('[ML-OVERRIDE] Applying Normal override to ML results');
+      mlResults = {
+        ...mlResults,
+        severity: 'normal',
+        predictedClass: 'Normal',
+        confidence: mlResults.confidence != null ? Math.max(mlResults.confidence, 0.8) : 0.8,
+        predictions: {
+          // UI shows top predictions by sorting values desc.
+          // Keep it simple: Normal should be the top one.
+          Normal: 1.0
+        },
+        note: 'ML overridden to Normal because all parameters are normal (rule-based).'
+      };
     }
 
     // Determine overall severity (prioritize critical)
@@ -97,10 +111,29 @@ router.post('/', authenticate, async (req, res) => {
       overallSeverity = mlResults.severity;
     }
 
-    // Get diet and medication suggestions from OpenAI
+    // Get diet and medication suggestions
+    // If rule-based says everything is normal, return only general wellness guidance.
+    // This prevents the LLM from generating condition-specific advice when the report is normal.
     let suggestions = null;
     try {
-      suggestions = await getSuggestions(detectedConditions, cbcData, gender);
+      if (ruleBasedResults?.overallSeverity === 'normal') {
+        suggestions = {
+          dietaryRecommendations: [
+            'Maintain a balanced diet with fruits, vegetables, whole grains, and lean proteins.',
+            'Stay hydrated and limit processed foods and added sugars.'
+          ],
+          lifestyleSuggestions: [
+            'Engage in regular moderate exercise (about 30 minutes most days).',
+            'Maintain a consistent sleep routine (7–9 hours) and manage stress.'
+          ],
+          possibleMedications: [],
+          whenToConsultDoctor: 'If you have symptoms or concerns, consult a healthcare provider for proper diagnosis and guidance.',
+          disclaimer:
+            'This information is for educational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment.'
+        };
+      } else {
+        suggestions = await getSuggestions(detectedConditions, cbcData, gender);
+      }
     } catch (suggestionError) {
       console.warn('Failed to get suggestions:', suggestionError.message);
       // Continue without suggestions

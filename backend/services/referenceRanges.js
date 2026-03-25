@@ -13,8 +13,9 @@ const referenceRanges = {
   
   // Red Blood Cells (RBC) - million cells/μL
   rbc: {
-    male: { min: 4.5, max: 5.5 },
-    female: { min: 4.0, max: 5.0 },
+    // Align with frontend ranges (frontend uses 4.5 - 5.9 for both).
+    male: { min: 4.5, max: 5.9 },
+    female: { min: 4.5, max: 5.9 },
     unit: 'million cells/μL'
   },
   
@@ -34,8 +35,9 @@ const referenceRanges = {
   
   // Hematocrit (%)
   hematocrit: {
-    male: { min: 40, max: 50 },
-    female: { min: 36, max: 46 },
+    // Align with frontend ranges (frontend uses 41 - 53).
+    male: { min: 41, max: 53 },
+    female: { min: 41, max: 53 },
     unit: '%'
   },
   

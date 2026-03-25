@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { authStorage } from './authStorage';
 
 // Base URL for the backend API
 // Vite uses import.meta.env, but we'll use a fallback for compatibility
@@ -15,8 +16,8 @@ const api = axios.create({
 // Request interceptor: Add JWT token to all requests
 api.interceptors.request.use(
   (config) => {
-    // Get token from localStorage
-    const token = localStorage.getItem('hmh_token');
+    // Prefer per-tab session token; fallback to legacy localStorage.
+    const token = authStorage.getToken() || localStorage.getItem('hmh_token');
     
     // If token exists, add it to Authorization header
     if (token) {
@@ -38,8 +39,9 @@ api.interceptors.response.use(
   (error) => {
     // If token is invalid or expired, remove it and redirect to login
     if (error.response?.status === 401) {
-      localStorage.removeItem('hmh_token');
-      localStorage.removeItem('hmh_user');
+      authStorage.clear();
+      localStorage.removeItem('hmh_token'); // legacy
+      localStorage.removeItem('hmh_user');  // legacy
       
       // Only redirect if we're not already on the login/landing page
       if (window.location.pathname !== '/login' && window.location.pathname !== '/') {

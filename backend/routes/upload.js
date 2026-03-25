@@ -100,7 +100,7 @@ async function callPythonOCRService(imagePath, originalFilename) {
         average_confidence: response.data.average_confidence,
         duration_seconds: response.data.duration_seconds,
         raw_response: response.data,
-        structured_data: response.data.ocr_result || {} // Full structured data from universal parser
+        structured_data: response.data.structured_data || {} // Full structured output from universal parser
       };
     } else {
       throw new Error(response.data?.error || 'OCR extraction failed');
@@ -110,17 +110,12 @@ async function callPythonOCRService(imagePath, originalFilename) {
     if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
       const errorMsg = 'Python OCR service is not running. Please start it: cd backend/ocr-service && python app.py';
       console.error('❌ Python OCR service not available:', error.message);
-      logError('ocr_error', originalFilename, errorMsg, {
-        error_code: error.code,
-        error_message: error.message
-      });
-      throw new Error(errorMsg);
+      // Let the outer upload handler log the OCR failure once.
+      const mappedError = new Error(errorMsg);
+      mappedError.code = error.code; // preserve axios error code for outer handler
+      throw mappedError;
     }
     console.error('❌ Python OCR service error:', error.message);
-    logError('ocr_error', originalFilename, error.message, {
-      error_code: error.code,
-      error_stack: error.stack
-    });
     throw error;
   }
 }
@@ -223,6 +218,13 @@ function normalizeCBCUnits(structuredData, regexValues) {
           console.log(`🔄 Normalized ${param}: ${rawValue} Lakhs → ${normalizedValue} cells/µL`);
         } else if (unit.includes('×10³') || unit.includes('x10³') || unit.includes('10^3') || 
                    unit.includes('k/') || unit.includes('k/ul') || unit.includes('k/µl')) {
+          normalizedValue = rawValue * 1000;
+          console.log(`🔄 Normalized ${param}: ${rawValue} ${unit} → ${normalizedValue} cells/µL`);
+        } else if (
+          // Reports often show platelet as x10^9/L or x10e9/L.
+          // 1 x10^9/L == 1000 cells/µL.
+          unit.includes('x10^9') || unit.includes('x10e9') || unit.includes('10^9') || unit.includes('10e9')
+        ) {
           normalizedValue = rawValue * 1000;
           console.log(`🔄 Normalized ${param}: ${rawValue} ${unit} → ${normalizedValue} cells/µL`);
         } else if (rawValue < 100 && rawValue > 10 && !unit.includes('/ul') && !unit.includes('/cumm')) {
@@ -358,23 +360,24 @@ function parseCBCValues(ocrResult) {
       /rdw[\s:]*(\d+\.?\d*)/gi
     ],
     neutrophils: [
-      /(?:neutrophils?|polymorphs?|neutrophil|polymorph)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      // Handle DOW-style "NEUTROPHILS% 49 % 40-80" where '%' is directly after the keyword.
+      /(?:neutrophils?|polymorphs?|neutrophil|polymorph)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*%?\s*(?:neutrophils?|polymorphs?)/gi
     ],
     lymphocytes: [
-      /(?:lymphocytes?|lymphocyte)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:lymphocytes?|lymphocyte)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*%?\s*(?:lymphocytes?)/gi
     ],
     monocytes: [
-      /(?:monocytes?|monocyte)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:monocytes?|monocyte)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*%?\s*(?:monocytes?)/gi
     ],
     eosinophils: [
-      /(?:eosinophils?|eosinophil)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:eosinophils?|eosinophil)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*%?\s*(?:eosinophils?)/gi
     ],
     basophils: [
-      /(?:basophils?|basophil)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:basophils?|basophil)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*%?\s*(?:basophils?)/gi
     ]
   };
@@ -386,7 +389,12 @@ function parseCBCValues(ocrResult) {
       const match = pattern.exec(textLower);
       if (match && match[1]) {
         const value = parseFloat(match[1]);
-        if (!isNaN(value) && value > 0) {
+        const isDiffPercentKey = ['neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'].includes(
+          key
+        );
+        // Differential percentages can legitimately be 0%.
+        const valueOk = !isNaN(value) && (isDiffPercentKey ? value >= 0 : value > 0);
+        if (valueOk) {
           // Extract unit context from surrounding text for better normalization
           const matchContext = match[0].toLowerCase();
           const contextStart = Math.max(0, match.index - 50);
@@ -492,7 +500,7 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
         const parsedData = parseCBCValues(ocrResult);
         
         // Get full structured data from OCR result (same format as ocr-code JSON files)
-        const structuredData = ocrResult.ocr_result || {};
+        const structuredData = ocrResult.structured_data || ocrResult.ocr_result || {};
         
         // Normalize units using structured data (prioritizes structured data over regex)
         const normalizedValues = normalizeCBCUnits(structuredData, parsedData.values);

@@ -80,7 +80,9 @@ CANONICAL_TO_MODEL_FEATURE: Dict[str, str] = {
     "hemoglobin": "Hb",
     "rbc": "RBC",
     "wbc": "WBC",
-    "platelets": "PLT",
+    # The sklearn models were trained with the exact feature name `PLATELETS`
+    # (NOT `PLT`).
+    "platelets": "PLATELETS",
     "hematocrit": "HCT",
     "mcv": "MCV",
     "mch": "MCH",
@@ -112,7 +114,15 @@ def build_feature_dataframe(cbc: Dict[str, Any], model) -> pd.DataFrame:
         # This should rarely happen for sklearn models trained on DataFrames
         feature_names = list(CANONICAL_TO_MODEL_FEATURE.values())
 
+    # If a feature is missing from OCR (e.g. RDW not found by regex),
+    # we impute with a "normal-range" default so the ML model doesn't see 0.
+    #
+    # RDW reference range in this app: 11.5 - 14.5 (%)
+    # Use midpoint to represent "normal".
+    RDW_IMPUTED_NORMAL: float = 13.0
+
     row: Dict[str, float] = {}
+    rdw_imputed = False
 
     for fname in feature_names:
         # Map training feature name back to our canonical key, if possible
@@ -121,12 +131,28 @@ def build_feature_dataframe(cbc: Dict[str, Any], model) -> pd.DataFrame:
 
         val = cbc.get(source_key)
         if val is None or val == "":
-            row[fname] = 0.0
+            if canonical_key == "rdw":
+                row[fname] = RDW_IMPUTED_NORMAL
+                rdw_imputed = True
+            else:
+                row[fname] = 0.0
         else:
             try:
-                row[fname] = float(val)
+                parsed = float(val)
+                if canonical_key == "rdw" and (parsed == 0.0):
+                    row[fname] = RDW_IMPUTED_NORMAL
+                    rdw_imputed = True
+                else:
+                    row[fname] = parsed
             except (TypeError, ValueError):
-                row[fname] = 0.0
+                if canonical_key == "rdw":
+                    row[fname] = RDW_IMPUTED_NORMAL
+                    rdw_imputed = True
+                else:
+                    row[fname] = 0.0
+
+    if rdw_imputed:
+        print(f"[ML-SERVICE] Imputed RDW={RDW_IMPUTED_NORMAL}% (normal-range default because RDW missing)")
 
     return pd.DataFrame([row], columns=feature_names)
 
@@ -141,6 +167,17 @@ def predict(req: CBCRequest):
     cbc = req.cbcData or {}
 
     try:
+        # Log the exact numeric inputs we feed into the ML model.
+        # This helps diagnose unit mismatches (e.g., platelets x10^9/L vs cells/µL).
+        input_keys = [
+            "hemoglobin", "rbc", "wbc", "platelets",
+            "neutrophils", "lymphocytes", "monocytes", "eosinophils", "basophils"
+        ]
+        # rdw is important because it is missing often; include it if present.
+        input_snapshot = {k: cbc.get(k) for k in input_keys}
+        input_snapshot["rdw"] = cbc.get("rdw")
+        print(f"[ML-SERVICE] inputSnapshot={input_snapshot}")
+
         # Decide which model to use based on presence of WBC differentials
         has_differentials = any(
             cbc.get(f) not in (None, "")
@@ -190,7 +227,9 @@ def predict(req: CBCRequest):
             used_model = "model_1_core_cbc.pkl"
 
         # Basic mapping back into the structure expected by Node `/api/analyze`
-        severity = str(label)
+        predicted_class = str(label).strip()  # label encoder output (condition classes)
+        severity_raw = predicted_class
+        severity_norm = severity_raw.lower()
         # fallback if your labels are different (e.g., "0/1/2")
         mapping = {
             "0": "normal",
@@ -201,7 +240,7 @@ def predict(req: CBCRequest):
             "moderate": "abnormal",
             "critical": "critical",
         }
-        severity = mapping.get(severity, "abnormal")
+        severity = mapping.get(severity_norm, mapping.get(severity_raw, "abnormal"))
 
         response = {
             "severity": severity,
@@ -209,12 +248,14 @@ def predict(req: CBCRequest):
             "predictions": probs if probs else {severity: 1.0},
             "note": "Real ML prediction from trained CBC model",
             "usedModel": used_model,
+            "predictedClass": predicted_class,
             "usedDifferentials": has_differentials,
         }
 
         # Log model details and confidence to the ML service terminal
         print(
             f"[ML-SERVICE] usedModel={used_model}, "
+            f"predictedClass={predicted_class}, "
             f"severity={severity}, "
             f"confidence={response['confidence']:.4f}"
         )
