@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Uploads and temporary files
+uploads/
+*.tmp
+*.temp
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Build outputs
+dist/
+build/
+*.min.js
+*.min.css
+
+# Exclude markdown files
+*.md
+
+# Python virtual environment
+ml-service/.venv/
+ml-service/.venv.venv/
+
+# Large data files (exceed GitHub 100MB limit)
+fyp_material/
+*.csv
+
+# Large ML model binaries (>50MB - use locally, obtain separately)
+Model/model_1_core_cbc.pkl
+Model/model_2_cbc_diff.pkl
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Allow backend lock file for CI
+!backend/package-lock.json

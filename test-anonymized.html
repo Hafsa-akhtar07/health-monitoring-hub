@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Anonymized Export</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #8B0000;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #8B0000;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #B22222;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            border-left: 4px solid #8B0000;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #f0fff4;
+        }
+        .info {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #3B82F6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test Anonymized Export Endpoint</h1>
+        
+        <div class="info">
+            <strong>Instructions:</strong>
+            <ol>
+                <li>Make sure you're logged into the HMH app in another tab</li>
+                <li>Click "Test Endpoint" button below</li>
+                <li>Results will appear below</li>
+            </ol>
+        </div>
+
+        <button onclick="testAnonymized()">Test Endpoint</button>
+        <button onclick="testWithPagination()">Test with Pagination</button>
+        <button onclick="clearResults()">Clear Results</button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function testAnonymized() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Loading...</p>';
+
+            try {
+                // Get token from localStorage (from the main app)
+                const token = localStorage.getItem('hmh_token');
+                
+                if (!token) {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h3>❌ Error: No Token Found</h3>
+                            <p>Please login to the HMH app first in another tab, then try again.</p>
+                            <p>The token is stored in localStorage when you login.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Make API call
+                const response = await fetch('http://localhost:5000/api/reports/anonymized', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h3>✅ Success!</h3>
+                            <p><strong>Count:</strong> ${data.count} records</p>
+                            <p><strong>Note:</strong> ${data.note}</p>
+                            <h4>Data Preview (first 3 records):</h4>
+                            <pre>${JSON.stringify(data.data.slice(0, 3), null, 2)}</pre>
+                            <h4>Full Response:</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h3>❌ Error: ${response.status} ${response.statusText}</h3>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Network Error</h3>
+                        <p>${error.message}</p>
+                        <p>Make sure the backend server is running on port 5000.</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function testWithPagination() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Loading with pagination...</p>';
+
+            try {
+                const token = localStorage.getItem('hmh_token');
+                
+                if (!token) {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h3>❌ Error: No Token Found</h3>
+                            <p>Please login first.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Test with limit and offset
+                const response = await fetch('http://localhost:5000/api/reports/anonymized?limit=5&offset=0', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h3>✅ Success with Pagination!</h3>
+                            <p><strong>Limit:</strong> 5</p>
+                            <p><strong>Offset:</strong> 0</p>
+                            <p><strong>Count:</strong> ${data.count} records</p>
+                            <h4>Data:</h4>
+                            <pre>${JSON.stringify(data.data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h3>❌ Error: ${response.status}</h3>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Network Error</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function clearResults() {
+            document.getElementById('result').innerHTML = '';
+        }
+
+        // Auto-check token on load
+        window.onload = function() {
+            const token = localStorage.getItem('hmh_token');
+            
+            // If opened as file://, show manual token input
+            if (window.location.protocol === 'file:') {
+                document.getElementById('result').innerHTML = `
+                    <div class="result error">
+                        <h3>⚠️ File Protocol Detected</h3>
+                        <p>Since this page is opened as a file, it can't access localStorage from localhost:3000.</p>
+                        <p><strong>Solution:</strong> Paste your token below and click "Test with Token"</p>
+                        <input type="text" id="manualToken" placeholder="Paste your JWT token here" 
+                               style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px;"
+                               value="${token || ''}">
+                        <button onclick="testWithManualToken()">Test with Token</button>
+                        <p style="margin-top: 10px; font-size: 12px; color: #666;">
+                            Your token: <code style="background: #f0f0f0; padding: 2px 5px; border-radius: 3px;">${token ? token.substring(0, 50) + '...' : 'Not found'}</code>
+                        </p>
+                    </div>
+                `;
+            } else if (!token) {
+                document.getElementById('result').innerHTML = `
+                    <div class="result error">
+                        <h3>⚠️ No Token Found</h3>
+                        <p>Please login to the HMH app first, then refresh this page.</p>
+                        <p>Go to: <a href="http://localhost:3000" target="_blank">http://localhost:3000</a></p>
+                    </div>
+                `;
+            } else {
+                document.getElementById('result').innerHTML = `
+                    <div class="result success">
+                        <h3>✅ Token Found</h3>
+                        <p>Ready to test! Click "Test Endpoint" button above.</p>
+                    </div>
+                `;
+            }
+        };
+
+        async function testWithManualToken() {
+            const manualToken = document.getElementById('manualToken').value;
+            if (!manualToken) {
+                alert('Please paste your token first');
+                return;
+            }
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Testing with manual token...</p>';
+
+            try {
+                const response = await fetch('http://localhost:5000/api/reports/anonymized', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${manualToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h3>✅ Success!</h3>
+                            <p><strong>Count:</strong> ${data.count} records</p>
+                            <p><strong>Note:</strong> ${data.note}</p>
+                            <h4>Data Preview (first 3 records):</h4>
+                            <pre>${JSON.stringify(data.data.slice(0, 3), null, 2)}</pre>
+                            <h4>Full Response:</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h3>❌ Error: ${response.status} ${response.statusText}</h3>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Network Error</h3>
+                        <p>${error.message}</p>
+                        <p>Make sure the backend server is running on port 5000.</p>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
+
