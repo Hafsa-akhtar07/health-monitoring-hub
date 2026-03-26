@@ -90,6 +90,7 @@ const initializeDatabase = async () => {
       email VARCHAR(255) UNIQUE NOT NULL,
       name VARCHAR(255),
       password VARCHAR(255) NOT NULL,
+      role VARCHAR(50) DEFAULT 'patient',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -108,6 +109,24 @@ const initializeDatabase = async () => {
     `);
   } catch (error) {
     console.log('[db] Password column migration check:', error.message);
+  }
+
+  // Ensure `role` exists for auth/admin queries on older databases.
+  try {
+    await query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'users' AND column_name = 'role'
+        ) THEN
+          ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'patient';
+          UPDATE users SET role = 'patient' WHERE role IS NULL;
+        END IF;
+      END $$;
+    `);
+  } catch (error) {
+    console.log('[db] Role column migration check:', error.message);
   }
 
   await query(`
