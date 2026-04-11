@@ -11,6 +11,44 @@ const { logError, logSuccess } = require('../services/logger');
 
 const router = express.Router();
 
+/** Canonical CBC keys in display / API order (always returned under `cbc_parameters`). */
+const STANDARD_CBC_PARAMS = [
+  'hemoglobin',
+  'hematocrit',
+  'rbc',
+  'wbc',
+  'platelets',
+  'mcv',
+  'rdw',
+  'mch',
+  'mchc',
+  'neutrophils',
+  'lymphocytes',
+  'monocytes',
+  'eosinophils',
+  'basophils'
+];
+
+/**
+ * Build a fixed 14-key map: number when extracted, null when missing.
+ * Reads scalar CBC fields from the merged upload payload object.
+ */
+function buildCbcParameterMap(mergedRoot) {
+  const map = {};
+  for (const key of STANDARD_CBC_PARAMS) {
+    const v = mergedRoot[key];
+    if (v !== undefined && v !== null && v !== '' && typeof v === 'number' && !Number.isNaN(v)) {
+      map[key] = v;
+    } else if (v !== undefined && v !== null && v !== '' && typeof v !== 'number') {
+      const n = parseFloat(v);
+      map[key] = !Number.isNaN(n) ? n : null;
+    } else {
+      map[key] = null;
+    }
+  }
+  return map;
+}
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -195,8 +233,8 @@ function normalizeCBCUnits(structuredData, regexValues) {
           console.log(`🔄 Normalized ${param}: ${rawValue} ${unit} → ${normalizedValue} cells/µL`);
         } else if (unit.includes('/ul') || unit.includes('/µl') || unit.includes('/cumm') || unit.includes('/cmm')) {
           normalizedValue = rawValue; // Already in absolute count
-        } else if (rawValue < 10 && rawValue > 0.1) {
-          // Likely in ×10³ format without explicit unit
+        } else if (rawValue < 10 && rawValue > 1.5) {
+          // Likely in ×10³ format without explicit unit (exclude 1.0–1.5: common OCR false positives)
           normalizedValue = rawValue * 1000;
           console.log(`🔄 Normalized ${param}: ${rawValue} (assumed ×10³) → ${normalizedValue} cells/µL`);
         }
@@ -313,6 +351,8 @@ function parseCBCValues(ocrResult) {
       /hb[\s:]*(\d+\.?\d*)/gi
     ],
     wbc: [
+      /total\s*wbc\s*count[\s:]*[=\-\s]*(\d{4,6})\b/gi,
+      /total\s*leucocyte\s*count[\s:]*[=\-\s]*(\d{4,6})\b/gi,
       /(?:w\.?\s*b\.?\s*c\.?|wbc|white\s*blood\s*cells?|total\s*w\.?\s*b\.?\s*c\.?|leukocytes|tlc)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(?:w\.?\s*b\.?\s*c\.?\s*count)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*(?:×?10³\/µl|k\/µl|k\/ul|per\s*µl|\/ul)?\s*(?:w\.?\s*b\.?\s*c\.?|wbc|white\s*blood)/gi,
@@ -345,14 +385,14 @@ function parseCBCValues(ocrResult) {
       /mcv[\s:]*(\d+\.?\d*)/gi
     ],
     mch: [
-      /(?:mch|m\.?\s*c\.?\s*h\.?|mean\s*corpuscular\s*hemoglobin)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
-      /(\d+\.?\d*)\s*(?:pg|picograms?)?\s*(?:mch)/gi,
-      /mch[\s:]*(\d+\.?\d*)/gi
+      /(?:mean\s*corpuscular\s*hemoglobin(?!\s*concentration)|\bmch\b|m\.?\s*c\.?\s*h\.?\b)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:pg|picograms?)?\s*(?:\bmch\b)/gi,
+      /\bmch\b[\s:]*(\d+\.?\d*)/gi
     ],
     mchc: [
-      /(?:mchc|m\.?\s*c\.?\s*h\.?\s*c\.?|mean\s*corpuscular\s*hemoglobin\s*concentration)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
-      /(\d+\.?\d*)\s*(?:g\/dl)?\s*(?:mchc)/gi,
-      /mchc[\s:]*(\d+\.?\d*)/gi
+      /(?:mean\s*corpuscular\s*hemoglobin\s*concentration|\bmchc\b|m\.?\s*c\.?\s*h\.?\s*c\.?\b)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*(?:g\/dl)?\s*(?:\bmchc\b)/gi,
+      /\bmchc\b[\s:]*(\d+\.?\d*)/gi
     ],
     rdw: [
       /(?:rdw|r\.?\s*d\.?\s*w\.?|red\s*cell\s*distribution\s*width)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
@@ -365,8 +405,8 @@ function parseCBCValues(ocrResult) {
       /(\d+\.?\d*)\s*%?\s*(?:neutrophils?|polymorphs?)/gi
     ],
     lymphocytes: [
-      /(?:lymphocytes?|lymphocyte)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
-      /(\d+\.?\d*)\s*%?\s*(?:lymphocytes?)/gi
+      /(?:lymphocytes?(?!\s*count)|lymphocyte\b)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*%?\s*(?:lymphocytes?(?!\s*count))/gi
     ],
     monocytes: [
       /(?:monocytes?|monocyte)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
@@ -403,12 +443,22 @@ function parseCBCValues(ocrResult) {
           
           // Unit conversions (will be further normalized by normalizeCBCUnits if structured data available)
           if (key === 'wbc') {
+            const explicitThousand =
+              contextText.includes('×10³') ||
+              contextText.includes('x10³') ||
+              contextText.includes('10^3') ||
+              contextText.includes('k/ul') ||
+              contextText.includes('k/µl');
+            // Reject stray "1" (and similar) from OCR unless units say ×10³ (avoids 1 → 1000 false positive)
+            if (!explicitThousand && value <= 1.5) {
+              console.log(`⚠️ Skipping dubious WBC regex match: ${value} (no explicit ×10³/k/µl context)`);
+              continue;
+            }
             // WBC: Convert to cells/µL (absolute count)
-            if (contextText.includes('×10³') || contextText.includes('x10³') || contextText.includes('10^3') || 
-                contextText.includes('k/ul') || contextText.includes('k/µl')) {
+            if (explicitThousand) {
               values[key] = value * 1000;
               console.log(`✅ Found ${key}: ${value} → ${values[key]} (converted from ×10³/µL)`);
-            } else if (value < 10 && value > 0.1) {
+            } else if (value < 10 && value > 1.5) {
               // Likely in ×10³ format without explicit unit
               values[key] = value * 1000;
               console.log(`✅ Found ${key}: ${value} → ${values[key]} (assumed ×10³/µL)`);
@@ -517,30 +567,40 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
           duration_seconds: ocrResult.duration_seconds,
           ocr_result: ocrResult.ocr_result  // Full JSON result (same as ocr-code output)
         };
+        extractedData.cbc_parameters = buildCbcParameterMap(extractedData);
         
         console.log(`✅ Python OCR extracted ${extractedData.total_detections} text blocks`);
         console.log(`📝 All text length: ${extractedData.all_text.length} characters`);
         
         // Display normalized values
         if (Object.keys(normalizedValues).length > 0) {
-          console.log('📊 Normalized CBC Values (Standard Units):');
-          const cbcParams = ['hemoglobin', 'rbc', 'wbc', 'platelets', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw',
-                            'neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'];
-          cbcParams.forEach(param => {
-            if (normalizedValues[param] !== undefined) {
-              const unit = param === 'wbc' || param === 'platelets' ? ' cells/µL' :
-                          param === 'rbc' ? ' million/µL' :
-                          param === 'hemoglobin' || param === 'mchc' ? ' g/dL' :
-                          param === 'hematocrit' || param === 'rdw' || ['neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'].includes(param) ? ' %' :
-                          param === 'mcv' ? ' fL' :
-                          param === 'mch' ? ' pg' : '';
-              console.log(`  ✅ ${param.toUpperCase().padEnd(15)}: ${normalizedValues[param]}${unit}`);
+          console.log('📊 Normalized CBC Values (Standard Units) — full 14-parameter view:');
+          const unitFor = (param) => {
+            if (param === 'wbc' || param === 'platelets') return ' cells/µL';
+            if (param === 'rbc') return ' million/µL';
+            if (param === 'hemoglobin' || param === 'mchc') return ' g/dL';
+            if (param === 'hematocrit' || param === 'rdw' || ['neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'].includes(param)) return ' %';
+            if (param === 'mcv') return ' fL';
+            if (param === 'mch') return ' pg';
+            return '';
+          };
+          STANDARD_CBC_PARAMS.forEach((param) => {
+            const v = extractedData.cbc_parameters[param];
+            const u = unitFor(param);
+            if (v !== null && v !== undefined) {
+              console.log(`  ✅ ${param.toUpperCase().padEnd(15)}: ${v}${u}`);
+            } else {
+              console.log(`  ❌ ${param.toUpperCase().padEnd(15)}: NOT FOUND`);
             }
           });
         } else {
           console.log('⚠️ No CBC values extracted from OCR text');
           console.log('📄 First 500 chars of OCR text:');
           console.log(extractedData.all_text.substring(0, 500));
+          console.log('📊 Full 14-parameter view (all missing from regex/structured scalars):');
+          STANDARD_CBC_PARAMS.forEach((param) => {
+            console.log(`  ❌ ${param.toUpperCase().padEnd(15)}: NOT FOUND`);
+          });
         }
       } else {
         throw new Error('OCR extraction failed - no data returned');
@@ -626,11 +686,11 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
       console.log(`⏱️ Duration: ${extractedData.duration_seconds.toFixed(2)} seconds`);
     }
     console.log('='.repeat(80));
-    const cbcParams = ['hemoglobin', 'rbc', 'wbc', 'platelets', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw'];
-    
-    cbcParams.forEach(param => {
-      if (extractedData[param] !== undefined && extractedData[param] !== null) {
-        console.log(`  ✅ ${param.toUpperCase().padEnd(15)}: ${extractedData[param]}`);
+    const summaryMap = extractedData.cbc_parameters || buildCbcParameterMap(extractedData);
+    STANDARD_CBC_PARAMS.forEach((param) => {
+      const v = summaryMap[param];
+      if (v !== null && v !== undefined) {
+        console.log(`  ✅ ${param.toUpperCase().padEnd(15)}: ${v}`);
       } else {
         console.log(`  ❌ ${param.toUpperCase().padEnd(15)}: NOT FOUND`);
       }

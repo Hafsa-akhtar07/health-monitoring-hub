@@ -21,6 +21,59 @@ const defaultManualData = {
   basophils: ''
 };
 
+/** Same order as backend `cbc_parameters` (always show 14 slots after OCR). */
+const STANDARD_CBC_PARAMS = [
+  'hemoglobin',
+  'hematocrit',
+  'rbc',
+  'wbc',
+  'platelets',
+  'mcv',
+  'rdw',
+  'mch',
+  'mchc',
+  'neutrophils',
+  'lymphocytes',
+  'monocytes',
+  'eosinophils',
+  'basophils'
+];
+
+const CBC_FIELD_LABELS = {
+  hemoglobin: 'Hemoglobin',
+  hematocrit: 'Hematocrit',
+  rbc: 'RBC',
+  wbc: 'WBC',
+  platelets: 'Platelets',
+  mcv: 'MCV',
+  rdw: 'RDW',
+  mch: 'MCH',
+  mchc: 'MCHC',
+  neutrophils: 'Neutrophils',
+  lymphocytes: 'Lymphocytes',
+  monocytes: 'Monocytes',
+  eosinophils: 'Eosinophils',
+  basophils: 'Basophils'
+};
+
+function buildCbcParametersFromOcr(ocrData) {
+  const map = {};
+  STANDARD_CBC_PARAMS.forEach((key) => {
+    if (ocrData.cbc_parameters && ocrData.cbc_parameters[key] !== undefined && ocrData.cbc_parameters[key] !== null) {
+      const n = Number(ocrData.cbc_parameters[key]);
+      map[key] = Number.isNaN(n) ? null : n;
+      return;
+    }
+    const raw = ocrData[key];
+    if (raw !== undefined && raw !== null && raw !== '' && !Number.isNaN(Number(raw))) {
+      map[key] = Number(raw);
+    } else {
+      map[key] = null;
+    }
+  });
+  return map;
+}
+
 const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onStateChange }) => {
   const [uploadMethod, setUploadMethod] = useState(initialMode || initialState?.uploadMethod || 'file'); // 'file', 'camera', 'manual'
   const [selectedFile, setSelectedFile] = useState(null);
@@ -42,6 +95,7 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
     mcv: { min: 80, max: 100, unit: 'fL', mandatory: false, inhumanMin: 50, inhumanMax: 150 },
     mch: { min: 27, max: 33, unit: 'pg', mandatory: false, inhumanMin: 15, inhumanMax: 50 },
     mchc: { min: 32, max: 36, unit: 'g/dL', mandatory: false, inhumanMin: 20, inhumanMax: 45 },
+    rdw: { min: 11.6, max: 14.5, unit: '%', mandatory: false, inhumanMin: 8, inhumanMax: 25 },
     // WBC differential counts (percentages)
     neutrophils: { min: 40, max: 80, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
     lymphocytes: { min: 20, max: 45, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
@@ -133,37 +187,19 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
 
         if (response.data && response.data.extractedData) {
             const ocrData = response.data.extractedData;
-            
-            // Extract CBC values if available (they should be at the root level)
-            const cbcValues = {};
-            const cbcParams = [
-              'hemoglobin',
-              'wbc',
-              'platelets',
-              'rbc',
-              'hematocrit',
-              'mcv',
-              'mch',
-              'mchc',
-              'rdw',
-              // Include WBC differentials if OCR found them
-              'neutrophils',
-              'lymphocytes',
-              'monocytes',
-              'eosinophils',
-              'basophils'
-            ];
-            cbcParams.forEach(param => {
-                if (ocrData[param] !== undefined && ocrData[param] !== null && !isNaN(ocrData[param])) {
-                    cbcValues[param] = ocrData[param].toString();
-                }
-            });
+            const cbc_parameters = buildCbcParametersFromOcr(ocrData);
+            const cbcValues = Object.fromEntries(
+              Object.entries(cbc_parameters)
+                .filter(([, v]) => v !== null)
+                .map(([k, v]) => [k, String(v)])
+            );
             
             // Display the extracted values
           const newExtracted = {
                 fileName: file.name,
                 date: new Date().toLocaleDateString(),
-                values: cbcValues, // Use extracted CBC values
+                values: cbcValues,
+                cbc_parameters,
                 allText: ocrData.all_text || '',
                 totalDetections: ocrData.total_detections || 0,
                 ocrResult: ocrData.ocr_result || ocrData.raw_ocr || [],
@@ -233,7 +269,7 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
 
   const checkValueStatus = (value, field) => {
     const range = cbcReferenceRanges[field];
-    if (!range || !value) return 'unknown';
+    if (!range || value === null || value === undefined || value === '') return 'unknown';
     const numValue = parseFloat(value);
     if (numValue < range.min) return 'low';
     if (numValue > range.max) return 'high';
@@ -753,25 +789,40 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                   </div>
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {Object.entries(extractedData.values).map(([field, value]) => (
-                      <div 
-                        key={field}
-                        className={`p-3 rounded-lg border ${
-                          getStatusColor(value, field)
-                        }`}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-medium text-gray-700 capitalize">
-                            {field}
-                          </span>
-                          <i className={`${getStatusIcon(value, field)} text-sm`}></i>
+                    {STANDARD_CBC_PARAMS.map((field) => {
+                      const raw =
+                        extractedData.cbc_parameters?.[field] ??
+                        (extractedData.values[field] !== undefined ? extractedData.values[field] : null);
+                      const value =
+                        raw === null || raw === undefined || raw === ''
+                          ? null
+                          : typeof raw === 'number'
+                            ? raw
+                            : parseFloat(raw);
+                      const display =
+                        value === null || Number.isNaN(value) ? '—' : String(value);
+                      return (
+                        <div
+                          key={field}
+                          className={`p-3 rounded-lg border ${
+                            display === '—' ? 'text-gray-500 bg-gray-50 border-gray-200' : getStatusColor(display, field)
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-medium text-gray-700">
+                              {CBC_FIELD_LABELS[field] || field}
+                            </span>
+                            <i className={`${getStatusIcon(display === '—' ? '' : display, field)} text-sm`}></i>
+                          </div>
+                          <div className={`text-lg font-bold ${display === '—' ? 'text-gray-400' : ''}`}>
+                            {display}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {cbcReferenceRanges[field]?.unit || ''}
+                          </div>
                         </div>
-                        <div className="text-lg font-bold">{value}</div>
-                        <div className="text-xs text-gray-500">
-                          {cbcReferenceRanges[field]?.unit}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   
                   <div className="mt-6 flex gap-3">
