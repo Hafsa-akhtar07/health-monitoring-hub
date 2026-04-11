@@ -36,9 +36,17 @@ COMMON_LAB_FIELDS = {
 COMMON_TEST_NAMES = {
     # Haematology tests
     'haemoglobin': ['haemoglobin', 'hemoglobin', 'hb', 'hgb'],
-    'wbc': ['wbc', 'w.b.c', 'w.b.c.', 'white blood cell', 'total leucocyte count', 'total w.b.c.', 'total wbc', 'leucocyte count', 'w.b.c count'],
-    'rbc': ['rbc', 'r.b.c', 'r.b.c.', 'red blood cell', 'rbc count', 'r.b.c count'],
-    'platelet': ['platelet', 'platelet count', 'plt'],
+    'wbc': [
+        'wbc', 'w.b.c', 'w.b.c.', 'white blood cell', 'white blood cells',
+        'total leucocyte count', 'total leukocyte count', 'total w.b.c.', 'total wbc',
+        'total wbc count', 'wbc count', 'leucocyte count', 'leukocyte count', 'tlc',
+        'w.b.c count',
+    ],
+    'rbc': [
+        'rbc', 'r.b.c', 'r.b.c.', 'red blood cell', 'red blood cells', 'erythrocyte',
+        'erythrocytes', 'rbc count', 'r.b.c count', 'total rbc', 'total rbc count',
+    ],
+    'platelet': ['platelet', 'platelets', 'platelet count', 'plt', 'thrombocyte', 'thrombocytes'],
     'neutrophils': ['neutrophils', 'polymorphs', 'neutrophil'],
     'lymphocytes': ['lymphocytes', 'lymphocyte'],
     'eosinophils': ['eosinophils', 'eosinophil'],
@@ -51,11 +59,20 @@ COMMON_TEST_NAMES = {
     'absolute_basophils': ['absolute basophil', 'absolute basophils'],
     
     # Blood indices
-    'mcv': ['mcv', 'm.c.v.', 'mean cell volume'],
-    'mch': ['mch', 'm.c.h.', 'mean cell hemoglobin'],
-    'mchc': ['mchc', 'm.c.h.c.', 'mean cell hb conc', 'mean cell hemoglobin concentration'],
-    'hct': ['hct', 'h.c.t.', 'hematocrit', 'haematocrit'],
-    'rdw': ['rdw', 'r.d.w.', 'rdw-cv', 'rdw-sd'],
+    'mcv': [
+        'mcv', 'm.c.v', 'm.c.v.', 'mean cell volume', 'mean corpuscular volume',
+    ],
+    'mch': [
+        'mch', 'm.c.h', 'm.c.h.', 'mean cell hemoglobin', 'mean corpuscular hemoglobin',
+    ],
+    'mchc': [
+        'mchc', 'm.c.h.c', 'm.c.h.c.', 'mean cell hb conc', 'mean cell hemoglobin concentration',
+        'mean corpuscular hemoglobin concentration',
+    ],
+    'hct': [
+        'hct', 'h.c.t', 'h.c.t.', 'hematocrit', 'haematocrit', 'pcv', 'packed cell volume',
+    ],
+    'rdw': ['rdw', 'r.d.w', 'r.d.w.', 'rdw-cv', 'rdw-sd', 'red cell distribution width'],
     'mpv': ['mpv', 'm.p.v.', 'mean platelet volume'],
     'pct': ['pct', 'plateletcrit'],
     'pdw': ['pdw'],
@@ -244,6 +261,27 @@ def _numeric_token_value(text: str) -> Optional[float]:
         return None
 
 
+def is_methodology_noise(text: str) -> bool:
+    """OCR sub-lines under test names (Calculated, Electrical Impedance, etc.)."""
+    if not text:
+        return False
+    n = normalize_text(text)
+    if len(n) > 100:
+        return False
+    fragments = (
+        'calculated',
+        'electrical impedance',
+        'impedance',
+        'vcs',
+        'immunoturbidimetry',
+        'fully automated',
+        'cell counter',
+        'flow cytometry',
+        'photometry',
+    )
+    return any(f in n for f in fragments)
+
+
 def is_wbc_percent_differential_test(test_name: str) -> bool:
     """
     True for 5-part WBC differential % lines (not absolute counts).
@@ -281,9 +319,12 @@ def _parse_wbc_percent_differential_row(
     tokens_before_ref: List[str] = []
     seen_ref = False
 
-    while i < min(start_idx + 14, len(texts)):
+    while i < min(start_idx + 22, len(texts)):
         t = texts[i].strip()
         if not t or t in [':', '.', '"', "'"]:
+            i += 1
+            continue
+        if is_methodology_noise(t):
             i += 1
             continue
         if is_reference_range(t):
@@ -352,15 +393,19 @@ def parse_test_result(texts: List[str], start_idx: int) -> Optional[Dict[str, An
         'REF. RANGE', 'REF. RANGE(S)',
         'UNIT', 'UNIT(S)',
         'TEST NAME', 'OBSERVED VALUE', 'OBSERVED VALUE(S)', 'REFERENCE RANGE', 'REFERENCE RANGE(S)',
+        'REFERENCE VALUE', 'REFERENCE VALUE(S)',
         'INVESTIGATION', 'UNITS', 'BIOLOGICAL REFERENCE INTERVAL'
     ]:
         return None
     
     # Skip if it's a section header
-    section_headers = ['HAEMATOLOGY', 'BLOOD INDICES', 'DIFFERENTIAL COUNT', 
-                       'PLATELET COUNT', 'RBC INDICES', 'PLATELETS INDICES',
-                       'ABSOLUTE LEUCOCYTE COUNT', 'COMPLETE BLOOD COUNT',
-                       'COMPLETE BLOOD PICTURE', 'CP (COMPLETE BLOOD PICTURE)']
+    section_headers = [
+        'HAEMATOLOGY', 'BLOOD INDICES', 'DIFFERENTIAL COUNT', 'DIFFERENTIAL WBC COUNT',
+        'DIFFERENTIAL LEUCOCYTE COUNT', 'DIFFERENTIAL LEUKOCYTE COUNT',
+        'PLATELET COUNT', 'RBC INDICES', 'PLATELETS INDICES',
+        'ABSOLUTE LEUCOCYTE COUNT', 'COMPLETE BLOOD COUNT',
+        'COMPLETE BLOOD PICTURE', 'CP (COMPLETE BLOOD PICTURE)',
+    ]
     if any(header in test_name.upper() for header in section_headers):
         return None
     
@@ -399,11 +444,20 @@ def parse_test_result(texts: List[str], start_idx: int) -> Optional[Dict[str, An
     
     result['test_name'] = test_name
     
-    # Look ahead up to 6 items total (including combined value+unit tokens)
-    while i < min(start_idx + 7, len(texts)) and (not found_value or not found_unit or not found_range):
+    # Look ahead across methodology / status tokens (Calculated, Normal, etc.)
+    lookahead_end = min(start_idx + 22, len(texts))
+    while i < lookahead_end and (not found_value or not found_unit or not found_range):
         current = texts[i].strip()
         
         if not current or current in [':', '.', '"', "'"]:
+            i += 1
+            continue
+
+        if is_methodology_noise(current):
+            i += 1
+            continue
+
+        if not found_value and normalize_text(current) == 'normal':
             i += 1
             continue
 
@@ -470,6 +524,372 @@ def parse_test_result(texts: List[str], start_idx: int) -> Optional[Dict[str, An
     return None
 
 
+def _cbc_row_has_value(parsed_data: Dict[str, Any], tokens: List[str]) -> bool:
+    """True if a row matching tokens already has a numeric observed_value."""
+    for sec in ('haematology_report', 'blood_indices'):
+        for row in parsed_data.get(sec) or []:
+            tn = normalize_text(row.get('test_name') or '')
+            if not any(t in tn for t in tokens):
+                continue
+            if 'mch' in tokens and 'mchc' in tn:
+                continue
+            ov = str(row.get('observed_value') or '').strip().lower()
+            if not ov or ov == 'normal':
+                continue
+            if re.match(r'^[\d.]+', ov):
+                return True
+    return False
+
+
+def _parse_float_safe(s: str) -> Optional[float]:
+    try:
+        return float(str(s).replace(',', '.'))
+    except (TypeError, ValueError):
+        return None
+
+
+def _cbc_row_value_plausible(
+    parsed_data: Dict[str, Any],
+    tokens: List[str],
+    low: float,
+    high: float,
+    exclude_in_tn: Optional[List[str]] = None,
+) -> bool:
+    """True if matching row has numeric observed_value already in [low, high]."""
+    skip_phrases = exclude_in_tn or []
+    for sec in ('haematology_report', 'blood_indices'):
+        for row in parsed_data.get(sec) or []:
+            tn = normalize_text(row.get('test_name') or '')
+            if any(p in tn for p in skip_phrases):
+                continue
+            if not any(t in tn for t in tokens):
+                continue
+            if 'mch' in tokens and 'mchc' in tn:
+                continue
+            ov = _parse_float_safe(str(row.get('observed_value') or '').strip())
+            if ov is None:
+                continue
+            if low <= ov <= high:
+                return True
+    return False
+
+
+def _fill_or_add_cbc_row(
+    parsed_data: Dict[str, Any],
+    section: str,
+    display_name: str,
+    tokens: List[str],
+    value: str,
+    unit: str = '',
+    *,
+    plausible: Optional[tuple] = None,
+    exclude_in_tn: Optional[List[str]] = None,
+) -> None:
+    """
+    Insert or update a CBC row. If plausible=(lo, hi) is set, an existing value
+    outside that range is treated as a bad OCR capture and overwritten.
+    """
+    skip_phrases = exclude_in_tn or []
+    target = parsed_data.setdefault(section, [])
+    for row in target:
+        tn = normalize_text(row.get('test_name') or '')
+        if any(p in tn for p in skip_phrases):
+            continue
+        if not any(t in tn for t in tokens):
+            continue
+        if 'mch' in tokens and 'mchc' in tn:
+            continue
+        raw_ov = str(row.get('observed_value') or '').strip()
+        ov = _parse_float_safe(raw_ov)
+        if plausible is not None:
+            lo, hi = plausible
+            if ov is not None and lo <= ov <= hi and raw_ov.lower() != 'normal':
+                return
+        else:
+            if raw_ov and re.match(r'^[\d.]+', raw_ov) and raw_ov.lower() != 'normal':
+                return
+        row['observed_value'] = value
+        if unit:
+            row['unit'] = unit
+        return
+    target.append({
+        'test_name': display_name,
+        'observed_value': value,
+        'unit': unit,
+        'reference_range': '',
+    })
+
+
+def _capture_followed_by_reference_dash(blob: str, m: re.Match) -> bool:
+    """True if match is likely the left bound of 'X - Y' (reference column), not the result."""
+    tail = blob[m.end() : m.end() + 24]
+    return bool(re.match(r'^\s*-\s*\d', tail))
+
+
+def _capture_is_rhs_of_dash_range(blob: str, group_start: int) -> bool:
+    """True if the number starts right after 'A - ' (right-hand side of a ref band like 32.50 - 34.50)."""
+    prefix = blob[:group_start].rstrip()
+    return bool(re.search(r'\d(?:\.\d+)?\s*-\s*$', prefix))
+
+
+def _find_capture_in_range(
+    blob: str,
+    pattern: str,
+    lo: float,
+    hi: float,
+    *,
+    skip_if_reference_dash: bool = False,
+) -> Optional[str]:
+    """
+    Scan regex matches; return first capture in [lo, hi].
+    If skip_if_reference_dash, ignore captures immediately followed by ' - <digit>' (ref ranges).
+    """
+    for m in re.finditer(pattern, blob, re.IGNORECASE):
+        gs = m.start(1)
+        if skip_if_reference_dash and _capture_followed_by_reference_dash(blob, m):
+            continue
+        if skip_if_reference_dash and _capture_is_rhs_of_dash_range(blob, gs):
+            continue
+        v = _parse_float_safe(m.group(1))
+        if v is not None and lo <= v <= hi:
+            return m.group(1)
+    return None
+
+
+def _last_plausible_number_after_label(
+    blob: str,
+    label_pattern: str,
+    lo: float,
+    hi: float,
+) -> Optional[str]:
+    """Like _first_plausible_number_after_label but keeps the last match (diff % after ref band)."""
+    last: Optional[str] = None
+    for lm in re.finditer(label_pattern, blob, re.IGNORECASE):
+        window = blob[lm.end() : lm.end() + 300]
+        for nm in re.finditer(r'(\d{1,2}(?:\.\d{1,2})?)\b', window):
+            abs_start = lm.end() + nm.start(1)
+            abs_end = lm.end() + nm.end()
+            tail = blob[abs_end : abs_end + 22]
+            if re.match(r'^\s*-\s*\d', tail):
+                continue
+            if _capture_is_rhs_of_dash_range(blob, abs_start):
+                continue
+            v = _parse_float_safe(nm.group(1))
+            if v is not None and lo <= v <= hi:
+                last = nm.group(1)
+    return last
+
+
+def _first_plausible_number_after_label(
+    blob: str,
+    label_pattern: str,
+    lo: float,
+    hi: float,
+) -> Optional[str]:
+    """
+    After each label match, scan forward for numeric tokens in range [lo, hi].
+    Skips values that start a reference span ('32.50 - 34.50').
+    Picks the first plausible result (handles ref column before result column in OCR).
+    """
+    for lm in re.finditer(label_pattern, blob, re.IGNORECASE):
+        window = blob[lm.end() : lm.end() + 300]
+        for nm in re.finditer(r'(\d{1,2}(?:\.\d{1,2})?)\b', window):
+            abs_start = lm.end() + nm.start(1)
+            abs_end = lm.end() + nm.end()
+            tail = blob[abs_end : abs_end + 22]
+            if re.match(r'^\s*-\s*\d', tail):
+                continue
+            if _capture_is_rhs_of_dash_range(blob, abs_start):
+                continue
+            v = _parse_float_safe(nm.group(1))
+            if v is not None and lo <= v <= hi:
+                return nm.group(1)
+    return None
+
+
+def _find_wbc_absolute_count(blob: str) -> Optional[str]:
+    """Resolve WBC in cells/µL from noisy OCR text (4–6 digits, optional split thousands)."""
+    skip = True
+    # Split thousands: "10 000", "10,000"
+    for m in re.finditer(
+        r'total\s*wbc\s*count\D{0,320}?(\d{1,2})[\s,]+(\d{3})\b',
+        blob,
+        re.IGNORECASE,
+    ):
+        if skip and _capture_followed_by_reference_dash(blob, m):
+            continue
+        try:
+            whole = int(m.group(1)) * 1000 + int(m.group(2))
+        except ValueError:
+            continue
+        if 2500 <= whole <= 100000:
+            return str(whole)
+    # All 4–6 digit groups after WBC labels (reference "4000 - 11000" may appear before result "10000").
+    # Prefer "total wbc count" so generic "wbc count" does not pick platelet counts on some layouts.
+    wbc_label_order = [
+        r'total\s*wbc\s*count',
+        r'\bwbc\s*count\b',
+        r'tlc\b',
+        r'leucocyte\s*count',
+        r'leukocyte\s*count',
+    ]
+    for label_pat in wbc_label_order:
+        for lm in re.finditer(label_pat, blob, re.IGNORECASE):
+            window = blob[lm.end() : lm.end() + 360]
+            for nm in re.finditer(r'(\d{4,6})\b', window):
+                abs_start = lm.end() + nm.start(1)
+                abs_end = lm.end() + nm.end()
+                tail = blob[abs_end : abs_end + 22]
+                if re.match(r'^\s*-\s*\d', tail):
+                    continue
+                if _capture_is_rhs_of_dash_range(blob, abs_start):
+                    continue
+                v = _parse_float_safe(nm.group(1))
+                if v is not None and 2500 <= v <= 100000:
+                    return nm.group(1)
+
+    pats = [
+        r'total\s*wbc\D{0,320}?(\d{5,6})\b',
+        r'total\s*wbc\D{0,320}?(\d{4,6})(?=\s*normal\b)',
+        r'(?:total\s*)?wbc\s*count\D{0,160}?(\d{4,6})\s*cumm',
+    ]
+    for pat in pats:
+        v = _find_capture_in_range(blob, pat, 2500.0, 100000.0, skip_if_reference_dash=skip)
+        if v:
+            return v
+    return None
+
+
+def _enrich_cbc_from_fulltext(joined_text: str, parsed_data: Dict[str, Any]) -> None:
+    """
+    Second pass: OCR often returns table cells out of strict reading order.
+    Scan flattened text with tolerant regex to recover common CBC lines.
+    """
+    if not joined_text or len(joined_text) < 40:
+        return
+    blob = re.sub(r'\s+', ' ', joined_text.lower())
+
+    specs = [
+        ('haematology_report', 'Hemoglobin', ['hemoglobin', 'hb', 'hgb'],
+         r'hemoglobin(?:\s*\([^)]*\))?[^0-9]{0,120}(\d{1,2}\.\d{1,2}|\d{1,2})(?=\s|$|g/)', 'g/dL', None),
+        ('haematology_report', 'Total RBC count', ['total rbc', 'rbc', 'erythrocyte'],
+         r'total\s*rbc\s*(?:count)?[^0-9]{0,40}(\d+\.?\d*)', '', None),
+        ('haematology_report', 'Platelet Count', ['platelet', 'plt'],
+         r'platelet\s*count[^0-9]{0,50}(\d{4,7})', '', None),
+        ('blood_indices', 'MCV', ['mcv'],
+         r'(?:mean\s*corpuscular\s*volume|\bmcv\b)(?:\s*\([^)]*\))?[^0-9]{0,80}(\d{2,3})', 'fL', (60.0, 120.0)),
+        ('blood_indices', 'RDW', ['rdw'],
+         r'(?:red\s*cell\s*distribution\s*width|\brdw\b)(?:\s*\([^)]*\))?[^0-9]{0,80}(\d+\.?\d*)', '%', (9.0, 25.0)),
+        ('blood_indices', 'Packed Cell Volume (PCV)', ['packed cell', 'pcv'],
+         r'(?:packed\s*cell\s*volume|\(?\bpcv\b\)?)(?:\s*\([^)]*\))?[^0-9]{0,80}(\d{1,2}\.?\d*)', '%', (20.0, 65.0)),
+    ]
+
+    # MCH / MCHC: scan all numbers after label; skip left-hand side of "X - Y" ref bands (fixes 32.5 vs 33).
+    mch_label = r'(?:\bmch\b|mean\s*corpuscular\s*hemoglobin(?!\s*concentration))'
+    mchc_label = r'(?:\bmchc\b|mean\s*corpuscular\s*hemoglobin\s*concentration)'
+    if not _cbc_row_value_plausible(
+        parsed_data, ['mchc', 'hemoglobin concentration'], 30.0, 38.0
+    ):
+        val = _first_plausible_number_after_label(blob, mchc_label, 30.0, 38.0)
+        if val:
+            _fill_or_add_cbc_row(
+                parsed_data,
+                'blood_indices',
+                'MCHC',
+                ['mchc', 'hemoglobin concentration'],
+                val,
+                'g/dL',
+                plausible=(30.0, 38.0),
+            )
+    if not _cbc_row_value_plausible(
+        parsed_data,
+        ['mch', 'corpuscular hemoglobin'],
+        26.0,
+        36.0,
+        exclude_in_tn=['concentration'],
+    ):
+        val = _first_plausible_number_after_label(blob, mch_label, 26.0, 36.0)
+        if val:
+            _fill_or_add_cbc_row(
+                parsed_data,
+                'blood_indices',
+                'MCH',
+                ['mch', 'corpuscular hemoglobin'],
+                val,
+                'pg',
+                plausible=(26.0, 36.0),
+                exclude_in_tn=['concentration'],
+            )
+
+    for section, label, tokens, pattern, unit, plausible in specs:
+        if plausible is not None:
+            if _cbc_row_value_plausible(parsed_data, tokens, plausible[0], plausible[1]):
+                continue
+            val = _find_capture_in_range(
+                blob,
+                pattern,
+                plausible[0],
+                plausible[1],
+                skip_if_reference_dash=True,
+            )
+            if val:
+                _fill_or_add_cbc_row(
+                    parsed_data, section, label, tokens, val, unit, plausible=plausible
+                )
+            continue
+        if _cbc_row_has_value(parsed_data, tokens):
+            continue
+        m = re.search(pattern, blob, re.IGNORECASE)
+        if not m:
+            continue
+        _fill_or_add_cbc_row(parsed_data, section, label, tokens, m.group(1), unit)
+
+    wbc_tokens = ['total wbc', 'wbc', 'leucocyte', 'leukocyte', 'tlc']
+    if not _cbc_row_value_plausible(parsed_data, wbc_tokens, 2500.0, 100000.0):
+        wbc_val = _find_wbc_absolute_count(blob)
+        if wbc_val:
+            _fill_or_add_cbc_row(
+                parsed_data,
+                'haematology_report',
+                'Total WBC count',
+                wbc_tokens,
+                wbc_val,
+                '',
+                plausible=(2500.0, 100000.0),
+            )
+
+    diff_specs = [
+        ('Neutrophils', ['neutrophil'], r'neutrophils?\D{0,100}?(\d{1,2}\.?\d*)\b', '%', (35.0, 95.0)),
+        (
+            'Lymphocytes',
+            ['lymphocyte'],
+            r'lymphocytes?(?!\s*count)',
+            '%',
+            (12.0, 48.0),
+        ),
+        ('Eosinophils', ['eosinophil'], r'eosinophils?\D{0,100}?(\d{1,2}\.?\d*)\b', '%', (0.0, 20.0)),
+        ('Monocytes', ['monocyte'], r'monocytes?\D{0,100}?(\d{1,2}\.?\d*)\b', '%', (0.0, 25.0)),
+        ('Basophils', ['basophil'], r'basophils?\D{0,100}?(\d{1,2}\.?\d*)\b', '%', (0.0, 5.0)),
+    ]
+    for label, tokens, pattern, unit, plausible in diff_specs:
+        if _cbc_row_value_plausible(parsed_data, tokens, plausible[0], plausible[1]):
+            continue
+        if label == 'Lymphocytes':
+            val = _last_plausible_number_after_label(blob, pattern, plausible[0], plausible[1])
+        else:
+            val = _find_capture_in_range(
+                blob,
+                pattern,
+                plausible[0],
+                plausible[1],
+                skip_if_reference_dash=False,
+            )
+        if val:
+            _fill_or_add_cbc_row(
+                parsed_data, 'haematology_report', label, tokens, val, unit, plausible=plausible
+            )
+
+
 def parse_universal_format(texts: List[str]) -> Dict[str, Any]:
     """
     Universal parser for blood reports.
@@ -513,9 +933,12 @@ def parse_universal_format(texts: List[str]) -> Dict[str, Any]:
             in_blood_indices_section = False
             i += 1
             # Skip headers
-            while i < len(texts) and texts[i].upper() in ['TEST DESCRIPTION', 'RESULT', 'REF. RANGE', 'UNIT',
-                                                          'TEST NAME', 'OBSERVED VALUE', 'REFERENCE RANGE',
-                                                          'INVESTIGATION', 'UNITS', 'BIOLOGICAL REFERENCE INTERVAL']:
+            while i < len(texts) and texts[i].upper() in [
+                'TEST DESCRIPTION', 'RESULT', 'RESULT(S)', 'REF. RANGE', 'REF. RANGE(S)', 'UNIT', 'UNIT(S)',
+                'TEST NAME', 'OBSERVED VALUE', 'OBSERVED VALUE(S)', 'REFERENCE RANGE', 'REFERENCE RANGE(S)',
+                'REFERENCE VALUE', 'REFERENCE VALUE(S)',
+                'INVESTIGATION', 'UNITS', 'BIOLOGICAL REFERENCE INTERVAL', 'STATUS',
+            ]:
                 i += 1
             continue
         
@@ -525,7 +948,10 @@ def parse_universal_format(texts: List[str]) -> Dict[str, Any]:
             i += 1
             continue
         
-        if any(x in text_upper for x in ['DIFFERENTIAL COUNT', 'DIFFERENTIAL LEUCOCYTE COUNT']):
+        if any(x in text_upper for x in [
+            'DIFFERENTIAL COUNT', 'DIFFERENTIAL WBC COUNT',
+            'DIFFERENTIAL LEUCOCYTE COUNT', 'DIFFERENTIAL LEUKOCYTE COUNT',
+        ]):
             current_category = "Differential Count"
             i += 1
             continue
@@ -664,6 +1090,8 @@ def parse_universal_format(texts: List[str]) -> Dict[str, Any]:
         
         i += 1
     
+    joined = " ".join(t for t in texts if t)
+    _enrich_cbc_from_fulltext(joined, parsed_data)
     return parsed_data
 
 
