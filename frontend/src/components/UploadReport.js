@@ -193,6 +193,14 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                 .filter(([, v]) => v !== null)
                 .map(([k, v]) => [k, String(v)])
             );
+
+            /** Raw server payload for the 14 CBC fields (debug — matches API / OCR service JSON). */
+            const serverCbcDebug = {
+              cbc_parameters: ocrData.cbc_parameters ?? null,
+              haematology_report: Array.isArray(ocrData.haematology_report)
+                ? ocrData.haematology_report
+                : [],
+            };
             
             // Display the extracted values
           const newExtracted = {
@@ -200,6 +208,7 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                 date: new Date().toLocaleDateString(),
                 values: cbcValues,
                 cbc_parameters,
+                serverCbcDebug,
                 allText: ocrData.all_text || '',
                 totalDetections: ocrData.total_detections || 0,
                 ocrResult: ocrData.ocr_result || ocrData.raw_ocr || [],
@@ -824,6 +833,27 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                       );
                     })}
                   </div>
+
+                  {extractedData.serverCbcDebug && (
+                    <div className="mt-6 border-t border-dashed border-gray-300 pt-4">
+                      <p className="text-sm font-semibold text-gray-800 mb-2">
+                        <i className="fas fa-bug mr-2 text-amber-600" aria-hidden />
+                        Debug: CBC JSON from server (14 fields)
+                      </p>
+                      <p className="text-xs text-gray-600 mb-2">
+                        Values below are taken directly from the upload API response (
+                        <code className="bg-gray-100 px-1 rounded">cbc_parameters</code> and{' '}
+                        <code className="bg-gray-100 px-1 rounded">haematology_report</code>
+                        ), not from the grid above.
+                      </p>
+                      <pre
+                        className="text-xs bg-gray-950 text-emerald-400 p-4 rounded-lg overflow-x-auto max-h-[28rem] overflow-y-auto font-mono leading-relaxed border border-gray-700"
+                        tabIndex={0}
+                      >
+                        {JSON.stringify(extractedData.serverCbcDebug, null, 2)}
+                      </pre>
+                    </div>
+                  )}
                   
                   <div className="mt-6 flex gap-3">
                     <Button 

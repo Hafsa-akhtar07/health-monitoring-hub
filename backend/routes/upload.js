@@ -49,6 +49,25 @@ function buildCbcParameterMap(mergedRoot) {
   return map;
 }
 
+/**
+ * Map Python OCR `cbc_fourteen` (found / observed_value / unit / test_name) to top-level numeric fields.
+ * No unit conversion — values are what the Python service extracted for display.
+ */
+function buildScalarsFromCbcFourteen(cbcFourteen) {
+  const out = {};
+  if (!cbcFourteen || typeof cbcFourteen !== 'object') {
+    return out;
+  }
+  for (const key of STANDARD_CBC_PARAMS) {
+    const cell = cbcFourteen[key];
+    if (cell && cell.found && cell.observed_value !== null && cell.observed_value !== '') {
+      const n = parseFloat(String(cell.observed_value).trim());
+      out[key] = Number.isNaN(n) ? null : n;
+    }
+  }
+  return out;
+}
+
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -87,7 +106,8 @@ const upload = multer({
  */
 async function callPythonOCRService(imagePath, originalFilename) {
   try {
-    const ocrServiceUrl = process.env.OCR_SERVICE_URL || 'http://localhost:5002';
+    // Use 127.0.0.1 (not "localhost") so Node does not connect via IPv6 ::1 while Flask listens on IPv4 only.
+    const ocrServiceUrl = process.env.OCR_SERVICE_URL || 'http://127.0.0.1:5002';
     console.log(`📤 Calling Python OCR service at ${ocrServiceUrl}/api/extract...`);
     
     const form = new FormData();
@@ -100,7 +120,8 @@ async function callPythonOCRService(imagePath, originalFilename) {
       headers: form.getHeaders(),
       timeout: 300000, // 5 minute timeout for OCR (PaddleOCR can be slow on first run)
       maxContentLength: Infinity,
-      maxBodyLength: Infinity
+      maxBodyLength: Infinity,
+      proxy: false // avoid HTTP(S)_PROXY sending local traffic through a proxy
     });
 
     if (response.data && response.data.success) {
@@ -138,7 +159,13 @@ async function callPythonOCRService(imagePath, originalFilename) {
         average_confidence: response.data.average_confidence,
         duration_seconds: response.data.duration_seconds,
         raw_response: response.data,
-        structured_data: response.data.structured_data || {} // Full structured output from universal parser
+        structured_data: response.data.structured_data || {},
+        cbc_fourteen: response.data.cbc_fourteen || null,
+        ocr_pass_used: response.data.ocr_pass_used,
+        ocr_compare: response.data.ocr_compare,
+        processed_at: response.data.processed_at,
+        structured_data_original: response.data.structured_data_original,
+        structured_data_preprocessed: response.data.structured_data_preprocessed
       };
     } else {
       throw new Error(response.data?.error || 'OCR extraction failed');
@@ -165,54 +192,65 @@ async function callPythonOCRService(imagePath, originalFilename) {
 function normalizeCBCUnits(structuredData, regexValues) {
   const normalized = { ...regexValues };
   
-  // Map test names to our parameter names
+  // Map test names to our parameter names (US spelling + common lab synonyms).
   const testNameMap = {
     'hemoglobin': ['hemoglobin', 'haemoglobin', 'hb', 'hgb'],
-    'rbc': ['rbc', 'r.b.c', 'red blood cell', 'total r.b.c', 'erythrocytes'],
-    'wbc': ['wbc', 'w.b.c', 'white blood cell', 'total w.b.c', 'leukocytes', 'tlc', 'total leucocyte count'],
-    'platelets': ['platelet', 'platelets', 'plt', 'platelet count', 'thrombocytes'],
-    'hematocrit': ['hematocrit', 'haematocrit', 'hct', 'h.c.t', 'pcv', 'packed cell volume'],
-    'mcv': ['mcv', 'm.c.v', 'mean corpuscular volume'],
-    'mch': ['mch', 'm.c.h', 'mean corpuscular hemoglobin'],
-    'mchc': ['mchc', 'm.c.h.c', 'mean corpuscular hemoglobin concentration'],
+    'rbc': ['rbc', 'r.b.c', 'red blood cell', 'total r.b.c', 'total rbc', 'erythrocytes', 'erythrocyte'],
+    'wbc': ['wbc', 'w.b.c', 'white blood cell', 'total w.b.c', 'total wbc', 'leukocytes', 'leukocyte',
+      'tlc', 'total leucocyte count', 'total leukocyte count', 'total wbc count', 'leukocyte count', 'leucocyte count'],
+    'platelets': ['platelet', 'platelets', 'plt', 'platelet count', 'thrombocytes', 'thrombocyte'],
+    'hematocrit': ['hematocrit', 'haematocrit', 'hematrocrit', 'hct', 'h.c.t', 'pcv', 'packed cell volume', 'packed cell vol'],
+    'mcv': ['mcv', 'm.c.v', 'mean corpuscular volume', 'mean cell volume'],
+    'mch': ['mch', 'm.c.h', 'mean corpuscular hemoglobin', 'mean cell hemoglobin'],
+    'mchc': ['mchc', 'm.c.h.c', 'mean corpuscular hemoglobin concentration', 'mean cell hemoglobin concentration'],
     'rdw': ['rdw', 'r.d.w', 'red cell distribution width'],
-    'neutrophils': ['neutrophils', 'polymorphs', 'neutrophil'],
+    'neutrophils': ['neutrophils', 'polymorphs', 'neutrophil', 'polymorph', 'segmented neutrophil', 'segmented neutrophils'],
     'lymphocytes': ['lymphocytes', 'lymphocyte'],
     'monocytes': ['monocytes', 'monocyte'],
     'eosinophils': ['eosinophils', 'eosinophil'],
     'basophils': ['basophils', 'basophil']
   };
-  
+
+  /** Avoid MCH matching MCHC rows (substring + “…hemoglobin concentration”). */
+  const termMatchesStructuredRow = (paramName, term, testNameRaw) => {
+    const testName = (testNameRaw || '').toLowerCase();
+    const t = term.toLowerCase();
+    if (!testName.includes(t)) return false;
+    if (paramName === 'mch') {
+      if (/\bmchc\b/i.test(testNameRaw || '')) return false;
+      if ((/mean\s*corpuscular|mean\s*cell/i.test(testName)) && /conc/i.test(testName)) return false;
+    }
+    return true;
+  };
+
   // Helper to find test in structured data
   const findTestInStructured = (paramName) => {
     const searchTerms = testNameMap[paramName] || [paramName.toLowerCase()];
-    
+
     // Search in haematology_report
     if (structuredData.haematology_report && Array.isArray(structuredData.haematology_report)) {
       for (const test of structuredData.haematology_report) {
-        const testName = (test.test_name || '').toLowerCase();
-        if (searchTerms.some(term => testName.includes(term))) {
+        if (searchTerms.some(term => termMatchesStructuredRow(paramName, term, test.test_name || ''))) {
           return test;
         }
       }
     }
-    
+
     // Search in blood_indices
     if (structuredData.blood_indices && Array.isArray(structuredData.blood_indices)) {
       for (const test of structuredData.blood_indices) {
-        const testName = (test.test_name || '').toLowerCase();
-        if (searchTerms.some(term => testName.includes(term))) {
+        if (searchTerms.some(term => termMatchesStructuredRow(paramName, term, test.test_name || ''))) {
           return test;
         }
       }
     }
-    
+
     return null;
   };
   
-  // Normalize each parameter
-  const paramsToNormalize = ['hemoglobin', 'rbc', 'wbc', 'platelets', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw', 
-                              'neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'];
+  // MCHC before MCH: defense in depth (findTestInStructured also disambiguates).
+  const paramsToNormalize = ['hemoglobin', 'rbc', 'wbc', 'platelets', 'hematocrit', 'mcv', 'mchc', 'mch', 'rdw',
+    'neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'];
   
   for (const param of paramsToNormalize) {
     const testData = findTestInStructured(param);
@@ -227,7 +265,10 @@ function normalizeCBCUnits(structuredData, regexValues) {
       // Normalize based on parameter and unit
       if (param === 'wbc') {
         // WBC: Convert to cells/µL (absolute count)
-        if (unit.includes('×10³') || unit.includes('x10³') || unit.includes('10^3') || 
+        if (unit.includes('thou') || unit.includes('thou/mm')) {
+          normalizedValue = rawValue * 1000;
+          console.log(`🔄 Normalized ${param}: ${rawValue} ${unit} → ${normalizedValue} cells/µL (thou/mm³)`);
+        } else if (unit.includes('×10³') || unit.includes('x10³') || unit.includes('10^3') ||
             unit.includes('k/') || unit.includes('k/ul') || unit.includes('k/µl')) {
           normalizedValue = rawValue * 1000;
           console.log(`🔄 Normalized ${param}: ${rawValue} ${unit} → ${normalizedValue} cells/µL`);
@@ -250,7 +291,10 @@ function normalizeCBCUnits(structuredData, regexValues) {
         }
       } else if (param === 'platelets') {
         // Platelets: Convert to cells/µL (absolute count)
-        if (unit.includes('lakhs') || unit.includes('lakh')) {
+        if (unit.includes('thou') || unit.includes('thou/mm')) {
+          normalizedValue = rawValue * 1000;
+          console.log(`🔄 Normalized ${param}: ${rawValue} ${unit} → ${normalizedValue} cells/µL (thou/mm³)`);
+        } else if (unit.includes('lakhs') || unit.includes('lakh')) {
           // 1 Lakh = 100,000
           normalizedValue = rawValue * 100000;
           console.log(`🔄 Normalized ${param}: ${rawValue} Lakhs → ${normalizedValue} cells/µL`);
@@ -353,6 +397,9 @@ function parseCBCValues(ocrResult) {
     wbc: [
       /total\s*wbc\s*count[\s:]*[=\-\s]*(\d{4,6})\b/gi,
       /total\s*leucocyte\s*count[\s:]*[=\-\s]*(\d{4,6})\b/gi,
+      /total\s*leukocyte\s*count[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /total\s*leucocyte\s*count[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:\btlc\b|total\s*leukocyte|total\s*leucocyte)[\s:()]*[=\-\s]*(\d+\.?\d*)/gi,
       /(?:w\.?\s*b\.?\s*c\.?|wbc|white\s*blood\s*cells?|total\s*w\.?\s*b\.?\s*c\.?|leukocytes|tlc)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(?:w\.?\s*b\.?\s*c\.?\s*count)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*(?:×?10³\/µl|k\/µl|k\/ul|per\s*µl|\/ul)?\s*(?:w\.?\s*b\.?\s*c\.?|wbc|white\s*blood)/gi,
@@ -375,33 +422,35 @@ function parseCBCValues(ocrResult) {
       /r\.?\s*b\.?\s*c\.?[\s:]*(\d+\.?\d*)/gi
     ],
     hematocrit: [
-      /(?:hematocrit|haematocrit|hct|h\.?\s*c\.?\s*t\.?|pcv|packed\s*cell\s*volume)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
-      /(\d+\.?\d*)\s*%?\s*(?:hematocrit|hct)/gi,
+      /(?:hematocrit|haematocrit|hematrocrit|hct|h\.?\s*c\.?\s*t\.?|pcv|packed\s*cell\s*vol(?:ume)?)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(\d+\.?\d*)\s*%?\s*(?:hematocrit|hematrocrit|hct)/gi,
       /hct[\s:]*(\d+\.?\d*)/gi
     ],
     mcv: [
-      /(?:mcv|m\.?\s*c\.?\s*v\.?|mean\s*corpuscular\s*volume)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:mcv|m\.?\s*c\.?\s*v\.?|mean\s*corpuscular\s*volume|mean\s*cell\s*volume)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*(?:fl|femtoliters?)?\s*(?:mcv)/gi,
       /mcv[\s:]*(\d+\.?\d*)/gi
     ],
     mch: [
-      /(?:mean\s*corpuscular\s*hemoglobin(?!\s*concentration)|\bmch\b|m\.?\s*c\.?\s*h\.?\b)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:mean\s*corpuscular\s*h[ae]moglobin(?!\s*conc)|mean\s*cell\s*h[ae]moglobin(?!\s*conc)|\bmch\b(?!\s*c)|m\.?\s*c\.?\s*h\.?\b(?!\s*c))[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*(?:pg|picograms?)?\s*(?:\bmch\b)/gi,
       /\bmch\b[\s:]*(\d+\.?\d*)/gi
     ],
     mchc: [
-      /(?:mean\s*corpuscular\s*hemoglobin\s*concentration|\bmchc\b|m\.?\s*c\.?\s*h\.?\s*c\.?\b)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:mean\s*corpuscular\s*h[ae]moglobin\s*conc(?:entration)?|mean\s*cell\s*h[ae]moglobin\s*conc(?:entration)?|\bmchc\b|m\.?\s*c\.?\s*h\.?\s*c\.?\b)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*(?:g\/dl)?\s*(?:\bmchc\b)/gi,
       /\bmchc\b[\s:]*(\d+\.?\d*)/gi
     ],
     rdw: [
+      /rdw\s*[-–]\s*cv[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /rdw\s*[-–]\s*sd[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(?:rdw|r\.?\s*d\.?\s*w\.?|red\s*cell\s*distribution\s*width)[\s:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*%?\s*(?:rdw)/gi,
       /rdw[\s:]*(\d+\.?\d*)/gi
     ],
     neutrophils: [
       // Handle DOW-style "NEUTROPHILS% 49 % 40-80" where '%' is directly after the keyword.
-      /(?:neutrophils?|polymorphs?|neutrophil|polymorph)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
+      /(?:(?:segmented\s*)?neutrophils?|polymorphs?|neutrophil|polymorph)[\s%:]*[=\-\s]*(\d+\.?\d*)/gi,
       /(\d+\.?\d*)\s*%?\s*(?:neutrophils?|polymorphs?)/gi
     ],
     lymphocytes: [
@@ -448,7 +497,8 @@ function parseCBCValues(ocrResult) {
               contextText.includes('x10³') ||
               contextText.includes('10^3') ||
               contextText.includes('k/ul') ||
-              contextText.includes('k/µl');
+              contextText.includes('k/µl') ||
+              (contextText.includes('thou') && (contextText.includes('mm3') || contextText.includes('mm^3') || contextText.includes('mm³')));
             // Reject stray "1" (and similar) from OCR unless units say ×10³ (avoids 1 → 1000 false positive)
             if (!explicitThousand && value <= 1.5) {
               console.log(`⚠️ Skipping dubious WBC regex match: ${value} (no explicit ×10³/k/µl context)`);
@@ -481,7 +531,10 @@ function parseCBCValues(ocrResult) {
             }
           } else if (key === 'platelets') {
             // Platelets: Convert to cells/µL (absolute count)
-            if (contextText.includes('lakhs') || contextText.includes('lakh')) {
+            if (contextText.includes('thou') && (contextText.includes('mm3') || contextText.includes('mm^3') || contextText.includes('mm³'))) {
+              values[key] = value * 1000;
+              console.log(`✅ Found ${key}: ${value} thou/mm³ → ${values[key]} cells/µL`);
+            } else if (contextText.includes('lakhs') || contextText.includes('lakh')) {
               // e.g., "1.28 Lakhs /cmm" → 128000
               values[key] = value * 100000;
               console.log(`✅ Found ${key}: ${value} Lakhs → ${values[key]} cells/µL`);
@@ -546,62 +599,45 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
       const ocrResult = await callPythonOCRService(filePath, req.file.originalname);
       
       if (ocrResult.success) {
-        // Parse CBC values from OCR result (regex-based extraction)
-        const parsedData = parseCBCValues(ocrResult);
-        
-        // Get full structured data from OCR result (same format as ocr-code JSON files)
-        const structuredData = ocrResult.structured_data || ocrResult.ocr_result || {};
-        
-        // Normalize units using structured data (prioritizes structured data over regex)
-        const normalizedValues = normalizeCBCUnits(structuredData, parsedData.values);
-        
-        // Combine normalized values with full structured data from universal parser
+        const raw = ocrResult.raw_response || {};
+        const structuredData = ocrResult.structured_data || raw.structured_data || {};
+
+        // Python OCR is the source of truth: pass through cbc_fourteen + structured_data as-is (no Node unit math).
+        const cbcFourteen = ocrResult.cbc_fourteen != null ? ocrResult.cbc_fourteen : raw.cbc_fourteen;
+        const cbcScalars = buildScalarsFromCbcFourteen(cbcFourteen);
+
         extractedData = {
-          ...normalizedValues,   // Normalized CBC values (standard units)
-          ...structuredData,     // Full structured data (patient_info, haematology_report, etc.)
+          ...structuredData,
+          ...cbcScalars,
+          cbc_fourteen: cbcFourteen || null,
+          ocr_pass_used: ocrResult.ocr_pass_used ?? raw.ocr_pass_used,
+          ocr_compare: ocrResult.ocr_compare ?? raw.ocr_compare,
+          processed_at: ocrResult.processed_at ?? raw.processed_at,
+          structured_data_original: ocrResult.structured_data_original ?? raw.structured_data_original,
+          structured_data_preprocessed: ocrResult.structured_data_preprocessed ?? raw.structured_data_preprocessed,
           raw_ocr: ocrResult.ocr_result,
-          all_text: parsedData.allText || ocrResult.all_text,
+          all_text: ocrResult.all_text || '',
           total_detections: ocrResult.total_detections || 0,
           accuracy_percentage: ocrResult.accuracy_percentage,
           average_confidence: ocrResult.average_confidence,
           duration_seconds: ocrResult.duration_seconds,
-          ocr_result: ocrResult.ocr_result  // Full JSON result (same as ocr-code output)
+          ocr_result: ocrResult.ocr_result
         };
         extractedData.cbc_parameters = buildCbcParameterMap(extractedData);
         
         console.log(`✅ Python OCR extracted ${extractedData.total_detections} text blocks`);
         console.log(`📝 All text length: ${extractedData.all_text.length} characters`);
-        
-        // Display normalized values
-        if (Object.keys(normalizedValues).length > 0) {
-          console.log('📊 Normalized CBC Values (Standard Units) — full 14-parameter view:');
-          const unitFor = (param) => {
-            if (param === 'wbc' || param === 'platelets') return ' cells/µL';
-            if (param === 'rbc') return ' million/µL';
-            if (param === 'hemoglobin' || param === 'mchc') return ' g/dL';
-            if (param === 'hematocrit' || param === 'rdw' || ['neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'].includes(param)) return ' %';
-            if (param === 'mcv') return ' fL';
-            if (param === 'mch') return ' pg';
-            return '';
-          };
-          STANDARD_CBC_PARAMS.forEach((param) => {
-            const v = extractedData.cbc_parameters[param];
-            const u = unitFor(param);
-            if (v !== null && v !== undefined) {
-              console.log(`  ✅ ${param.toUpperCase().padEnd(15)}: ${v}${u}`);
-            } else {
-              console.log(`  ❌ ${param.toUpperCase().padEnd(15)}: NOT FOUND`);
-            }
-          });
-        } else {
-          console.log('⚠️ No CBC values extracted from OCR text');
-          console.log('📄 First 500 chars of OCR text:');
-          console.log(extractedData.all_text.substring(0, 500));
-          console.log('📊 Full 14-parameter view (all missing from regex/structured scalars):');
-          STANDARD_CBC_PARAMS.forEach((param) => {
+        console.log('📊 CBC (Python pass-through, cbc_fourteen) — full 14-parameter view:');
+        STANDARD_CBC_PARAMS.forEach((param) => {
+          const cell = cbcFourteen && cbcFourteen[param];
+          const v = extractedData.cbc_parameters[param];
+          const u = cell && cell.unit ? ` ${cell.unit}` : '';
+          if (v !== null && v !== undefined) {
+            console.log(`  ✅ ${param.toUpperCase().padEnd(15)}: ${v}${u}`);
+          } else {
             console.log(`  ❌ ${param.toUpperCase().padEnd(15)}: NOT FOUND`);
-          });
-        }
+          }
+        });
       } else {
         throw new Error('OCR extraction failed - no data returned');
       }

@@ -23,4 +23,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
-
+.venv
+# OCR-Service
+ocr-service/
