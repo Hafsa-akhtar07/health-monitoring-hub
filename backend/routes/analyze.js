@@ -24,6 +24,49 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
+    /**
+     * Ensure WBC differential values are in % (model training + most reports).
+     * If differential values look like absolute counts (/µL) and WBC is present,
+     * convert via: percent = (diffAbs / wbcAbs) * 100.
+     */
+    const normalizeDifferentialsToPercent = (input) => {
+      const out = { ...input };
+      const diffKeys = ['neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'];
+
+      const wbcRaw = out.wbc;
+      let wbc = wbcRaw === null || wbcRaw === undefined || wbcRaw === '' ? null : parseFloat(wbcRaw);
+      if (Number.isNaN(wbc)) wbc = null;
+
+      // If client sent WBC in k/mcL (4–10-ish), convert to cells/µL.
+      const wbcAbs = wbc != null && wbc > 0 && wbc < 200 ? wbc * 1000 : wbc;
+
+      diffKeys.forEach((k) => {
+        const raw = out[k];
+        const v = raw === null || raw === undefined || raw === '' ? null : parseFloat(raw);
+        if (v == null || Number.isNaN(v)) return;
+
+        // Already percent
+        if (v >= 0 && v <= 100) {
+          out[k] = v;
+          return;
+        }
+
+        // Try converting absolute -> percent if WBC available.
+        if (wbcAbs != null && wbcAbs > 0) {
+          // If differential looks like k/mcL, convert to cells/µL first.
+          const diffAbs = v > 0 && v < 200 ? v * 1000 : v;
+          const pct = (diffAbs / wbcAbs) * 100;
+          if (pct >= 0 && pct <= 100) {
+            out[k] = Math.round(pct * 100) / 100; // 2dp
+          }
+        }
+      });
+
+      return out;
+    };
+
+    const normalizedCbcData = normalizeDifferentialsToPercent(cbcData);
+
     // Validate required fields
     // For strict validation (e.g., when saving a full report) we want all core CBC fields,
     // but for AI analysis we can still proceed if some are missing.
@@ -40,10 +83,10 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     // Rule-based detection
-    const ruleBasedResults = analyzeCBC(cbcData, gender);
+    const ruleBasedResults = analyzeCBC(normalizedCbcData, gender);
 
     // Detect potential conditions based on abnormalities
-    const detectedConditions = detectConditions(ruleBasedResults, cbcData, gender);
+    const detectedConditions = detectConditions(ruleBasedResults, normalizedCbcData, gender);
 
     // ML Service call (mock or real)
     let mlResults = null;
@@ -52,7 +95,7 @@ router.post('/', authenticate, async (req, res) => {
     try {
       const mlServiceUrl = process.env.ML_SERVICE_URL || 'http://localhost:5001';
       const mlResponse = await axios.post(`${mlServiceUrl}/predict`, {
-        cbcData: cbcData
+        cbcData: normalizedCbcData
       }, {
         timeout: 5000 // 5 second timeout
       });
@@ -132,7 +175,7 @@ router.post('/', authenticate, async (req, res) => {
             'This information is for educational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment.'
         };
       } else {
-        suggestions = await getSuggestions(detectedConditions, cbcData, gender);
+        suggestions = await getSuggestions(detectedConditions, normalizedCbcData, gender);
       }
     } catch (suggestionError) {
       console.warn('Failed to get suggestions:', suggestionError.message);

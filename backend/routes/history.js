@@ -91,7 +91,10 @@ router.get('/trends', authenticate, async (req, res) => {
   try {
     const parameter = req.query.parameter || 'hemoglobin'; // Default to hemoglobin
 
-    const validParameters = ['hemoglobin', 'rbc', 'wbc', 'platelets', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw'];
+    const validParameters = [
+      'hemoglobin', 'rbc', 'wbc', 'platelets', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw',
+      'neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'
+    ];
     if (!validParameters.includes(parameter)) {
       return res.status(400).json({
         error: 'Invalid parameter',

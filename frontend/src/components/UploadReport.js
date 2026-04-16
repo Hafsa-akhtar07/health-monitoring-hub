@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
@@ -13,7 +13,6 @@ const defaultManualData = {
   mcv: '',
   mch: '',
   mchc: '',
-  // Optional differential counts (in %)
   neutrophils: '',
   lymphocytes: '',
   monocytes: '',
@@ -21,118 +20,149 @@ const defaultManualData = {
   basophils: ''
 };
 
-/** Same order as backend `cbc_parameters` (always show 14 slots after OCR). */
-const STANDARD_CBC_PARAMS = [
-  'hemoglobin',
-  'hematocrit',
-  'rbc',
-  'wbc',
-  'platelets',
-  'mcv',
-  'rdw',
-  'mch',
-  'mchc',
-  'neutrophils',
-  'lymphocytes',
-  'monocytes',
-  'eosinophils',
-  'basophils'
-];
-
-const CBC_FIELD_LABELS = {
-  hemoglobin: 'Hemoglobin',
-  hematocrit: 'Hematocrit',
-  rbc: 'RBC',
-  wbc: 'WBC',
-  platelets: 'Platelets',
-  mcv: 'MCV',
-  rdw: 'RDW',
-  mch: 'MCH',
-  mchc: 'MCHC',
-  neutrophils: 'Neutrophils',
-  lymphocytes: 'Lymphocytes',
-  monocytes: 'Monocytes',
-  eosinophils: 'Eosinophils',
-  basophils: 'Basophils'
+// Cleveland Clinic reference ranges (adults).
+// WBC differentials are treated as percentages to match the ML model + most reports.
+const cbcReferenceRanges = {
+  hemoglobin: { min: 11.5, max: 17.0, unit: 'g/dL', mandatory: true, inhumanMin: 3, inhumanMax: 25 },
+  wbc: { min: 4000, max: 10000, unit: 'cells/µL', mandatory: true, inhumanMin: 500, inhumanMax: 100000 },
+  platelets: { min: 150000, max: 400000, unit: 'cells/µL', mandatory: true, inhumanMin: 10000, inhumanMax: 2000000 },
+  rbc: { min: 4.0, max: 6.1, unit: 'million cells/µL', mandatory: true, inhumanMin: 1, inhumanMax: 10 },
+  hematocrit: { min: 36, max: 55, unit: '%', mandatory: false, inhumanMin: 10, inhumanMax: 70 },
+  mcv: { min: 80, max: 100, unit: 'fL', mandatory: false, inhumanMin: 50, inhumanMax: 150 },
+  mch: { min: 27, max: 31, unit: 'pg', mandatory: false, inhumanMin: 15, inhumanMax: 50 },
+  mchc: { min: 32, max: 36, unit: 'g/dL', mandatory: false, inhumanMin: 20, inhumanMax: 45 },
+  rdw: { min: 12, max: 15, unit: '%', mandatory: false, inhumanMin: 8, inhumanMax: 25 },
+  // WBC differential counts (%)
+  neutrophils: { min: 40, max: 80, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
+  lymphocytes: { min: 20, max: 40, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
+  monocytes: { min: 2, max: 10, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
+  eosinophils: { min: 1, max: 6, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
+  basophils: { min: 0, max: 1, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 }
 };
 
-function buildCbcParametersFromOcr(ocrData) {
-  const map = {};
-  STANDARD_CBC_PARAMS.forEach((key) => {
-    if (ocrData.cbc_parameters && ocrData.cbc_parameters[key] !== undefined && ocrData.cbc_parameters[key] !== null) {
-      const n = Number(ocrData.cbc_parameters[key]);
-      map[key] = Number.isNaN(n) ? null : n;
-      return;
-    }
-    const raw = ocrData[key];
-    if (raw !== undefined && raw !== null && raw !== '' && !Number.isNaN(Number(raw))) {
-      map[key] = Number(raw);
-    } else {
-      map[key] = null;
-    }
-  });
-  return map;
-}
+const aiFeatures = [
+  {
+    icon: 'fa-robot',
+    title: 'ML Diagnosis',
+    shortDesc: 'Detects conditions like anemia, infection risks, and more using advanced machine learning',
+    longDesc: 'Our ML models analyze your CBC parameters against thousands of clinical cases to identify potential conditions like anemia, infections, inflammatory disorders, and blood abnormalities. The system provides probability scores and explains the reasoning behind each detection.'
+  },
+  {
+    icon: 'fa-chart-line',
+    title: 'Trend Analysis',
+    shortDesc: 'Tracks your health parameters over time with interactive visualizations',
+    longDesc: 'Upload multiple reports to see how your CBC parameters change over weeks or months. Interactive graphs show trends, highlight concerning patterns, and predict future values. Perfect for monitoring chronic conditions or treatment effectiveness.'
+  },
+  {
+    icon: 'fa-apple-alt',
+    title: 'Personalized Tips',
+    shortDesc: 'Diet and lifestyle recommendations based on your specific results',
+    longDesc: 'Receive customized diet plans, exercise recommendations, and lifestyle modifications tailored to your CBC results. For example, if iron is low, get iron-rich food suggestions; if WBC is high, learn about immune-boosting strategies.'
+  },
+  {
+    icon: 'fa-chart-simple',
+    title: 'Severity Scoring',
+    shortDesc: 'Priority-based health alerts and severity classifications',
+    longDesc: 'Each abnormality is classified as Mild, Moderate, or Severe based on how far values deviate from normal ranges. Get immediate alerts for critical values and understand which issues need urgent attention vs routine follow-up.'
+  }
+];
 
 const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onStateChange }) => {
-  const [uploadMethod, setUploadMethod] = useState(initialMode || initialState?.uploadMethod || 'file'); // 'file', 'camera', 'manual'
+  const [uploadMethod, setUploadMethod] = useState(initialMode || 'file');
   const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
-  const [extractedData, setExtractedData] = useState(initialState?.extractedData || null);
+  const [extractedData, setExtractedData] = useState(null);
   const [error, setError] = useState(null);
-  const [manualData, setManualData] = useState(initialState?.manualData || defaultManualData);
+  const [manualData, setManualData] = useState(defaultManualData);
+  const [manualGender, setManualGender] = useState(initialState?.manualGender || null); // 'male' | 'female' | null
+  const [expandedFeature, setExpandedFeature] = useState(null);
+  
+  const topRef = useRef(null);
 
-  const cbcReferenceRanges = {
-    hemoglobin: { min: 13.5, max: 17.5, unit: 'g/dL', mandatory: true, inhumanMin: 3, inhumanMax: 25 },
-    // WBC and platelets are stored as ABSOLUTE COUNTS (cells/µL) after OCR normalization
-    // Align frontend ranges with backend/rule-based logic to avoid false CRITICAL flags.
-    wbc: { min: 4000, max: 11000, unit: 'cells/µL', mandatory: true, inhumanMin: 500, inhumanMax: 100000 },
-    platelets: { min: 150000, max: 450000, unit: 'cells/µL', mandatory: true, inhumanMin: 10000, inhumanMax: 2000000 },
-    rbc: { min: 4.5, max: 5.9, unit: '×10⁶/µL', mandatory: true, inhumanMin: 1, inhumanMax: 10 },
-    hematocrit: { min: 41, max: 53, unit: '%', mandatory: false, inhumanMin: 10, inhumanMax: 70 },
-    mcv: { min: 80, max: 100, unit: 'fL', mandatory: false, inhumanMin: 50, inhumanMax: 150 },
-    mch: { min: 27, max: 33, unit: 'pg', mandatory: false, inhumanMin: 15, inhumanMax: 50 },
-    mchc: { min: 32, max: 36, unit: 'g/dL', mandatory: false, inhumanMin: 20, inhumanMax: 45 },
-    rdw: { min: 11.6, max: 14.5, unit: '%', mandatory: false, inhumanMin: 8, inhumanMax: 25 },
-    // WBC differential counts (percentages)
-    neutrophils: { min: 40, max: 80, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
-    lymphocytes: { min: 20, max: 45, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
-    monocytes: { min: 2, max: 10, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
-    eosinophils: { min: 1, max: 6, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 },
-    basophils: { min: 0, max: 1, unit: '%', mandatory: false, inhumanMin: 0, inhumanMax: 100 }
+  const getRangeForManualField = (field) => {
+    const base = cbcReferenceRanges[field];
+    if (!base) return null;
+    if (field === 'hemoglobin') {
+      if (manualGender === 'male') return { ...base, min: 13.0, max: 17.0 };
+      if (manualGender === 'female') return { ...base, min: 11.5, max: 15.5 };
+      return base;
+    }
+    if (field === 'rbc') {
+      if (manualGender === 'male') return { ...base, min: 4.5, max: 6.1 };
+      if (manualGender === 'female') return { ...base, min: 4.0, max: 5.4 };
+      return base;
+    }
+    if (field === 'hematocrit') {
+      if (manualGender === 'male') return { ...base, min: 40, max: 55 };
+      if (manualGender === 'female') return { ...base, min: 36, max: 48 };
+      return base;
+    }
+    return base;
   };
 
+  // Scroll to top when component mounts
   useEffect(() => {
-    if (initialMode) {
-      setUploadMethod(initialMode);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // Clear all form data function
+  const clearAllData = () => {
+    setSelectedFile(null);
+    setExtractedData(null);
+    setError(null);
+    setManualData(defaultManualData);
+    setOcrProgress(0);
+    setIsProcessing(false);
+    setExpandedFeature(null);
+    
+    if (onStateChange) {
+      onStateChange({
+        uploadMethod: 'file',
+        extractedData: null,
+        manualData: defaultManualData
+      });
     }
-  }, [initialMode]);
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Handle page refresh detection
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      sessionStorage.removeItem('uploadState');
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    // Check if page was refreshed
+    if (performance.navigation && performance.navigation.type === 1) {
+      clearAllData();
+    }
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   useEffect(() => {
     if (initialState) {
       if (initialState.uploadMethod) setUploadMethod(initialState.uploadMethod);
       if (initialState.extractedData) setExtractedData(initialState.extractedData);
       if (initialState.manualData) setManualData(initialState.manualData);
+      if (initialState.manualGender !== undefined) setManualGender(initialState.manualGender);
     }
   }, [initialState]);
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (file && (file.type === 'application/pdf' || file.type.startsWith('image/'))) {
+    if (file && file.type.startsWith('image/')) {
       setSelectedFile(file);
       setError(null);
       handleFileUpload(file);
     } else {
-      setError('Please upload a PDF or image file (JPG, PNG)');
-    }
-    if (onStateChange) {
-      onStateChange({
-        uploadMethod,
-        extractedData,
-        manualData
-      });
+      setError('Please upload an image file (JPG or PNG only)');
     }
   };
 
@@ -140,19 +170,12 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file && (file.type === 'application/pdf' || file.type.startsWith('image/'))) {
+    if (file && file.type.startsWith('image/')) {
       setSelectedFile(file);
       setError(null);
       handleFileUpload(file);
     } else {
-      setError('Please upload a PDF or image file (JPG, PNG)');
-    }
-    if (onStateChange) {
-      onStateChange({
-        uploadMethod,
-        extractedData,
-        manualData
-      });
+      setError('Please upload an image file (JPG or PNG only)');
     }
   };
 
@@ -161,101 +184,148 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
     setOcrProgress(0);
     setError(null);
     
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
     try {
-        const formData = new FormData();
-        formData.append('file', file);
+      const formData = new FormData();
+      formData.append('file', file);
 
-        // Simulate progress
-        const progressInterval = setInterval(() => {
-            setOcrProgress(prev => {
-                if (prev >= 90) {
-                    clearInterval(progressInterval);
-                    return 90;
-                }
-                return prev + 10;
-            });
-        }, 200);
+      const progressInterval = setInterval(() => {
+        setOcrProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
 
-        const response = await api.post('/upload', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
+      const response = await api.post('/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      clearInterval(progressInterval);
+      setOcrProgress(100);
+
+      if (response.data && response.data.extractedData) {
+        const ocrData = response.data.extractedData;
+
+        const extractGenderFromOcr = (data) => {
+          const candidates = [];
+          if (data && typeof data === 'object') {
+            if (data.patient_info && typeof data.patient_info === 'object') {
+              candidates.push(
+                data.patient_info.sex,
+                data.patient_info.gender,
+                data.patient_info['Age / Sex'],
+                data.patient_info.age_sex
+              );
+            }
+            candidates.push(data.sex, data.gender);
+            if (typeof data.all_text === 'string') candidates.push(data.all_text);
+          }
+
+          const joined = candidates
+            .filter((v) => v !== undefined && v !== null)
+            .map((v) => String(v))
+            .join(' | ')
+            .toLowerCase();
+
+          if (/\b(female|woman|girl)\b/.test(joined) || /\/f\b/.test(joined) || /\bf\b/.test(joined)) return 'female';
+          if (/\b(male|man|boy)\b/.test(joined) || /\/m\b/.test(joined) || /\bm\b/.test(joined)) return 'male';
+          return null;
+        };
+
+        const normalizeDifferentialsToPercent = (valuesObj) => {
+          const out = { ...valuesObj };
+          const diffKeys = ['neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'];
+          const wbcRaw = out.wbc;
+          const wbc = wbcRaw == null || wbcRaw === '' ? null : parseFloat(wbcRaw);
+          const wbcAbs = wbc != null && !Number.isNaN(wbc) ? (wbc > 0 && wbc < 200 ? wbc * 1000 : wbc) : null;
+
+          diffKeys.forEach((k) => {
+            const raw = out[k];
+            const v = raw == null || raw === '' ? null : parseFloat(raw);
+            if (v == null || Number.isNaN(v)) return;
+
+            // already percent
+            if (v >= 0 && v <= 100) {
+              out[k] = v;
+              return;
+            }
+
+            // convert abs -> % if wbc present
+            if (wbcAbs != null && wbcAbs > 0) {
+              const diffAbs = v > 0 && v < 200 ? v * 1000 : v;
+              const pct = (diffAbs / wbcAbs) * 100;
+              if (pct >= 0 && pct <= 100) out[k] = Math.round(pct * 100) / 100;
+            }
+          });
+          return out;
+        };
+        
+        const cbcValues = {};
+        const cbcParams = [
+          'hemoglobin', 'wbc', 'platelets', 'rbc', 'hematocrit',
+          'mcv', 'mch', 'mchc', 'rdw', 'neutrophils',
+          'lymphocytes', 'monocytes', 'eosinophils', 'basophils'
+        ];
+        
+        cbcParams.forEach(param => {
+          if (ocrData[param] !== undefined && ocrData[param] !== null && !isNaN(ocrData[param])) {
+            cbcValues[param] = ocrData[param];
+          }
         });
 
-        clearInterval(progressInterval);
-        setOcrProgress(100);
-
-        if (response.data && response.data.extractedData) {
-            const ocrData = response.data.extractedData;
-            const cbc_parameters = buildCbcParametersFromOcr(ocrData);
-            const cbcValues = Object.fromEntries(
-              Object.entries(cbc_parameters)
-                .filter(([, v]) => v !== null)
-                .map(([k, v]) => [k, String(v)])
-            );
-
-            /** Raw server payload for the 14 CBC fields (debug — matches API / OCR service JSON). */
-            const serverCbcDebug = {
-              cbc_parameters: ocrData.cbc_parameters ?? null,
-              haematology_report: Array.isArray(ocrData.haematology_report)
-                ? ocrData.haematology_report
-                : [],
-            };
-            
-            // Display the extracted values
-          const newExtracted = {
-                fileName: file.name,
-                date: new Date().toLocaleDateString(),
-                values: cbcValues,
-                cbc_parameters,
-                serverCbcDebug,
-                allText: ocrData.all_text || '',
-                totalDetections: ocrData.total_detections || 0,
-                ocrResult: ocrData.ocr_result || ocrData.raw_ocr || [],
-                warnings: response.data.warnings || []
-          };
-          setExtractedData(newExtracted);
-          if (onStateChange) {
-            onStateChange({
-              uploadMethod,
-              extractedData: newExtracted,
-              manualData
-            });
-          }
-            
-            // If no CBC values were extracted but we have OCR text, show a helpful message
-            if (Object.keys(cbcValues).length === 0 && ocrData.all_text) {
-                console.log('⚠️ OCR extracted text but no CBC values parsed. Text:', ocrData.all_text.substring(0, 200));
-            }
-            
-            console.log('✅ Successfully extracted:', { cbcValues, totalDetections: ocrData.total_detections });
-        } else {
-            throw new Error('No data extracted from file');
+        const gender = extractGenderFromOcr(ocrData);
+        const normalizedValues = normalizeDifferentialsToPercent(cbcValues);
+        
+        const newExtracted = {
+          fileName: file.name,
+          date: new Date().toLocaleDateString(),
+          gender,
+          values: normalizedValues,
+          allText: ocrData.all_text || '',
+          totalDetections: ocrData.total_detections || 0,
+          ocrResult: ocrData.ocr_result || ocrData.raw_ocr || [],
+          warnings: response.data.warnings || []
+        };
+        
+        setExtractedData(newExtracted);
+        if (onStateChange) {
+          onStateChange({
+            uploadMethod,
+            extractedData: newExtracted,
+            manualData,
+            manualGender
+          });
         }
+      } else {
+        throw new Error('No data extracted from file');
+      }
     } catch (err) {
-        console.error('Upload error:', err);
-        
-        let errorMessage = 'OCR extraction failed. Please try manual entry.';
-        
-        if (err.response?.data?.message) {
-            errorMessage = err.response.data.message;
-        } else if (err.message.includes('Network Error')) {
-            errorMessage = 'Network error. Please check your connection.';
-        } else if (err.message.includes('timeout')) {
-            errorMessage = 'OCR service timed out. Please try again.';
-        }
-        
-        setError(errorMessage);
-        setOcrProgress(0);
-
-      // Fallback refresh for Admin Dashboard:
-      // Socket.IO events can stop after repeated failures, but admin UI listens to this event.
-      // Dispatching here ensures logs update even when OCR service is down.
+      console.error('Upload error:', err);
+      
+      let errorMessage = 'OCR extraction failed. Please try manual entry.';
+      
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message.includes('Network Error')) {
+        errorMessage = 'Network error. Please check your connection.';
+      } else if (err.message.includes('timeout')) {
+        errorMessage = 'OCR service timed out. Please try again.';
+      }
+      
+      setError(errorMessage);
+      setOcrProgress(0);
+      
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('hmh:adminRefresh'));
       }
     } finally {
-        setIsProcessing(false);
+      setIsProcessing(false);
     }
   };
 
@@ -269,7 +339,8 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
         onStateChange({
           uploadMethod,
           extractedData,
-          manualData: updated
+          manualData: updated,
+          manualGender
         });
       }
       return updated;
@@ -277,8 +348,8 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
   };
 
   const checkValueStatus = (value, field) => {
-    const range = cbcReferenceRanges[field];
-    if (!range || value === null || value === undefined || value === '') return 'unknown';
+    const range = getRangeForManualField(field);
+    if (!range || !value) return 'unknown';
     const numValue = parseFloat(value);
     if (numValue < range.min) return 'low';
     if (numValue > range.max) return 'high';
@@ -295,33 +366,6 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
     }
   };
 
-  // Extract CBC values from OCR text
-  const extractCBCValuesFromText = (text) => {
-    const values = {};
-    const textLower = text.toLowerCase();
-    
-    // Simple pattern matching for common CBC parameters
-    const patterns = {
-      hemoglobin: /(?:hemoglobin|haemoglobin|hb|hgb)[\s:]*(\d+\.?\d*)/i,
-      wbc: /(?:wbc|white\s*blood\s*cells?|total\s*w\.?\s*b\.?\s*c\.?)[\s:]*(\d+\.?\d*)/i,
-      platelets: /(?:platelets?|plt|platelet\s*count)[\s:]*(\d+\.?\d*)/i,
-      rbc: /(?:rbc|red\s*blood\s*cells?|total\s*r\.?\s*b\.?\s*c\.?)[\s:]*(\d+\.?\d*)/i,
-      hematocrit: /(?:hematocrit|haematocrit|hct|h\.?\s*c\.?\s*t\.?)[\s:]*(\d+\.?\d*)/i,
-      mcv: /(?:mcv|m\.?\s*c\.?\s*v\.?)[\s:]*(\d+\.?\d*)/i,
-      mch: /(?:mch|m\.?\s*c\.?\s*h\.?)[\s:]*(\d+\.?\d*)/i,
-      mchc: /(?:mchc|m\.?\s*c\.?\s*h\.?\s*c\.?)[\s:]*(\d+\.?\d*)/i
-    };
-    
-    for (const [key, pattern] of Object.entries(patterns)) {
-      const match = text.match(pattern);
-      if (match) {
-        values[key] = parseFloat(match[1]);
-      }
-    }
-    
-    return values;
-  };
-
   const getStatusIcon = (value, field) => {
     const status = checkValueStatus(value, field);
     switch (status) {
@@ -333,31 +377,37 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
   };
 
   const validateInhumanValue = (value, field) => {
-    const range = cbcReferenceRanges[field];
+    const range = getRangeForManualField(field);
     if (!range || !value) return null;
     const numValue = parseFloat(value);
     if (numValue < range.inhumanMin) {
-      return `Value too low (${value}). Minimum physiologically possible: ${range.inhumanMin} ${range.unit}. Please check your input.`;
+      return `Value too low (${value}). Minimum: ${range.inhumanMin} ${range.unit}`;
     }
     if (numValue > range.inhumanMax) {
-      return `Value too high (${value}). Maximum physiologically possible: ${range.inhumanMax} ${range.unit}. Please check your input.`;
+      return `Value too high (${value}). Maximum: ${range.inhumanMax} ${range.unit}`;
     }
     return null;
   };
 
-  // Enable "Analyze with AI" only when ALL fields are filled with valid numbers in range.
-  const isManualFormValid = Object.entries(cbcReferenceRanges).every(([field]) => {
-    const raw = (manualData[field] ?? '').toString().trim();
-    if (raw === '') return false;
-    const num = parseFloat(raw);
-    if (Number.isNaN(num)) return false;
-    return !validateInhumanValue(raw, field);
-  });
+  const isManualFormValid = () => {
+    const mandatoryFields = Object.entries(cbcReferenceRanges)
+      .filter(([_, range]) => range.mandatory)
+      .map(([field]) => field);
+    
+    for (const field of mandatoryFields) {
+      const raw = (manualData[field] ?? '').toString().trim();
+      if (raw === '') return false;
+      const num = parseFloat(raw);
+      if (Number.isNaN(num)) return false;
+      if (validateInhumanValue(raw, field)) return false;
+    }
+    return true;
+  };
 
   const handleManualSubmit = async () => {
     setError(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     
-    // Validate mandatory fields
     const mandatoryFields = Object.entries(cbcReferenceRanges)
       .filter(([_, range]) => range.mandatory)
       .map(([field]) => field);
@@ -369,7 +419,6 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
       return;
     }
 
-    // Validate inhuman values
     const inhumanErrors = [];
     Object.entries(manualData).forEach(([field, value]) => {
       if (value && value !== '') {
@@ -387,14 +436,16 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
 
     try {
       const response = await api.post('/reports', {
-        cbcData: manualData
+        cbcData: manualData,
+        gender: manualGender
       });
 
       if (onUploadSuccess) {
         onUploadSuccess({
           reportId: response.data.reportId || Date.now().toString(),
           extractedData: manualData,
-          filename: 'manual_entry'
+          filename: 'manual_entry',
+          gender: manualGender
         });
       }
     } catch (err) {
@@ -408,49 +459,59 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
       onUploadSuccess({
         reportId: Date.now().toString(),
         extractedData: extractedData.values,
-        filename: extractedData.fileName
+        filename: extractedData.fileName,
+        gender: extractedData.gender || null
       });
     }
   };
 
+  const handleReset = () => {
+    if (window.confirm('Are you sure you want to clear all entered data?')) {
+      clearAllData();
+      setUploadMethod('file');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#fff8f8] to-[#FFE4E1] p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
+    <div ref={topRef} className="min-h-screen p-4 md:p-8 relative overflow-hidden" style={{
+      background: 'linear-gradient(180deg, #fff5f5 0%, #ffe0e0 10%, #ffcccc 20%, #ffb3b3 35%, #ff9999 50%, #ff8080 65%, #e06666 80%, #cc4d4d 90%, #b33b3b 100%)',
+      backgroundAttachment: 'fixed'
+    }}>
+      <div className="max-w-6xl mx-auto relative z-10">
         {/* Header */}
         <div className="mb-6 md:mb-8">
-          {onBack && (
-            <button 
-              onClick={onBack}
-              className="flex items-center gap-2 text-[#8B0000] hover:text-[#B22222] mb-4 group transition-colors"
-            >
-              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform"></i>
-              <span className="font-medium">Back to Dashboard</span>
-            </button>
-          )}
-          
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-[#8B0000] mb-2">
+              <h1 className="text-3xl md:text-4xl font-bold text-[#2c1212] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
                 Upload & Analyze Your CBC Report
               </h1>
-              <p className="text-gray-600 max-w-3xl">
-                Upload an image or PDF of your Complete Blood Count (CBC) report. 
+              <p className="text-[#4e2a2a] max-w-3xl font-medium">
+                Upload an image of your Complete Blood Count (CBC) report. 
                 Our advanced OCR technology will extract all values, and our AI will provide clear, 
                 easy-to-understand insights.
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-full bg-[#FFE4E1] flex items-center justify-center">
-                <i className="fas fa-robot text-lg text-[#8B0000]"></i>
+            <div className="flex items-center gap-3">
+              <Button 
+                onClick={handleReset}
+                className="bg-white/80 backdrop-blur-sm text-[#8B0000] hover:bg-white hover:text-[#B22222] border border-[#8B0000]/30 shadow-md transition-all duration-300 hover:scale-105"
+              >
+                <i className="fas fa-redo-alt mr-2"></i>
+                Reset Form
+              </Button>
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-md">
+                  <i className="fas fa-robot text-lg text-[#8B0000]"></i>
+                </div>
+                <span className="text-sm font-semibold text-[#4e2a2a]">AI-Powered Analysis</span>
               </div>
-              <span className="text-sm text-gray-600">AI-Powered Analysis</span>
             </div>
           </div>
         </div>
 
         {/* Error Message */}
         {error && (
-          <Alert className="mb-6 border-red-200 bg-red-50">
+          <Alert className="mb-6 border-red-300 bg-red-100/90 backdrop-blur-sm shadow-lg">
             <i className="fas fa-exclamation-circle text-red-600 mt-1"></i>
             <AlertDescription className="text-red-800">
               {error}
@@ -458,7 +519,7 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                 <Button 
                   variant="outline" 
                   size="sm"
-                  className="mt-2 border-red-300 text-red-700 hover:bg-red-100"
+                  className="mt-2 border-red-400 text-red-700 hover:bg-red-200 ml-2"
                   onClick={() => {
                     setUploadMethod('manual');
                     setError(null);
@@ -474,31 +535,42 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
 
         {/* Upload Methods Tabs */}
         <div className="mb-6 md:mb-8">
-          <div className="flex flex-wrap gap-2 border-b border-gray-200">
-            {[
-              { id: 'file', icon: 'fa-file-upload', label: 'Upload File', desc: 'PDF, JPG, PNG' },
-              { id: 'camera', icon: 'fa-camera', label: 'Take Photo', desc: 'Use Camera' },
-              { id: 'manual', icon: 'fa-keyboard', label: 'Manual Entry', desc: 'If OCR Fails' }
-            ].map(method => (
-              <button
-                key={method.id}
-                onClick={() => {
-                  setUploadMethod(method.id);
-                  setError(null);
-                }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-t-lg transition-all ${
-                  uploadMethod === method.id
-                    ? 'bg-white border-t border-x border-gray-200 text-[#8B0000] font-semibold shadow-sm'
-                    : 'text-gray-600 hover:text-[#8B0000] hover:bg-white/50'
-                }`}
-              >
-                <i className={`fas ${method.icon} ${uploadMethod === method.id ? 'text-[#8B0000]' : 'text-gray-400'}`}></i>
-                <div className="text-left">
-                  <div className="font-medium">{method.label}</div>
-                  <div className="text-xs text-gray-500">{method.desc}</div>
-                </div>
-              </button>
-            ))}
+          <div className="flex flex-wrap gap-2 border-b border-white/30">
+            <button
+              onClick={() => {
+                setUploadMethod('file');
+                setError(null);
+                clearAllData();
+              }}
+              className={`flex items-center gap-3 px-6 py-3 rounded-t-lg transition-all duration-300 ${
+                uploadMethod === 'file'
+                  ? 'bg-white/95 backdrop-blur-sm border-t border-x border-white/50 text-[#8B0000] font-semibold shadow-lg scale-105'
+                  : 'text-[#4e2a2a] hover:text-[#8B0000] hover:bg-white/40 backdrop-blur-sm'
+              }`}
+            >
+              <i className={`fas fa-file-upload ${uploadMethod === 'file' ? 'text-[#8B0000]' : 'text-[#8B0000]/60'}`}></i>
+              <div className="text-left">
+                <div className="font-medium">Upload File</div>
+                <div className="text-xs text-gray-600">JPG, PNG</div>
+              </div>
+            </button>
+            <button
+              onClick={() => {
+                setUploadMethod('manual');
+                setError(null);
+              }}
+              className={`flex items-center gap-3 px-6 py-3 rounded-t-lg transition-all duration-300 ${
+                uploadMethod === 'manual'
+                  ? 'bg-white/95 backdrop-blur-sm border-t border-x border-white/50 text-[#8B0000] font-semibold shadow-lg scale-105'
+                  : 'text-[#4e2a2a] hover:text-[#8B0000] hover:bg-white/40 backdrop-blur-sm'
+              }`}
+            >
+              <i className={`fas fa-keyboard ${uploadMethod === 'manual' ? 'text-[#8B0000]' : 'text-[#8B0000]/60'}`}></i>
+              <div className="text-left">
+                <div className="font-medium">Manual Entry</div>
+                <div className="text-xs text-gray-600">If OCR Fails</div>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -507,12 +579,12 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
           <div className="lg:col-span-2 space-y-6">
             {/* Upload Area */}
             {uploadMethod === 'file' && (
-              <Card className="shadow-xl shadow-[#DC143C]/10 border-2 border-dashed border-[#8B0000]/20 hover:border-[#8B0000]/40 transition-all duration-300">
+              <Card className="shadow-2xl hover:shadow-red-900/30 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardContent className="p-8">
                   <div 
-                    className={`upload-dropzone rounded-xl border-2 border-dashed ${
-                      isDragging ? 'border-[#8B0000] bg-[#fff8f8]' : 'border-gray-300'
-                    } p-12 text-center transition-all cursor-pointer`}
+                    className={`rounded-xl border-2 border-dashed transition-all duration-300 ${
+                      isDragging ? 'border-[#8B0000] bg-[#fff8f8] scale-105' : 'border-gray-300 hover:border-[#8B0000]/50'
+                    } p-12 text-center cursor-pointer`}
                     onClick={() => document.getElementById('file-input').click()}
                     onDragOver={(e) => {
                       e.preventDefault();
@@ -524,28 +596,28 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                     <input
                       type="file"
                       id="file-input"
-                      accept=".pdf,.jpg,.jpeg,.png"
+                      accept="image/jpeg,image/jpg,image/png"
                       className="hidden"
                       onChange={handleFileSelect}
                     />
                     
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#FFE4E1] to-[#fff8f8] flex items-center justify-center mx-auto mb-6">
-                      <i className="fas fa-cloud-upload-alt text-3xl text-[#8B0000]"></i>
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#8B0000] to-[#B22222] flex items-center justify-center mx-auto mb-6 shadow-xl transform transition hover:scale-110 duration-300">
+                      <i className="fas fa-cloud-upload-alt text-3xl text-white"></i>
                     </div>
                     
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    <h3 className="text-xl font-semibold text-[#2c1212] mb-2">
                       {selectedFile ? 'File Selected!' : 'Drag & Drop Your Report'}
                     </h3>
-                    <p className="text-gray-600 mb-4">
+                    <p className="text-[#4e2a2a] mb-4">
                       {selectedFile 
                         ? selectedFile.name
-                        : 'Supported formats: PDF, JPG, PNG (Max 10MB)'
+                        : 'Supported formats: JPG, PNG (Max 10MB)'
                       }
                     </p>
                     
                     {!selectedFile && (
                       <Button 
-                        className="bg-[#8B0000] hover:bg-[#B22222] text-white shadow-lg shadow-[#8B0000]/30"
+                        className="bg-gradient-to-r from-[#8B0000] to-[#B22222] hover:from-[#A52A2A] hover:to-[#8B0000] text-white shadow-lg shadow-red-900/50 hover:shadow-red-900/70 transition-all duration-300 hover:scale-105"
                       >
                         <i className="fas fa-folder-open mr-2"></i>
                         Browse Files
@@ -561,14 +633,14 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                             setExtractedData(null);
                             setError(null);
                           }}
-                          className="border-gray-300"
+                          className="border-gray-400 text-[#4e2a2a] hover:border-[#8B0000] hover:text-[#8B0000] transition-all duration-300"
                         >
                           <i className="fas fa-times mr-2"></i>
                           Change File
                         </Button>
                         <Button 
                           onClick={() => handleFileUpload(selectedFile)}
-                          className="bg-[#8B0000] hover:bg-[#B22222] text-white"
+                          className="bg-gradient-to-r from-[#8B0000] to-[#B22222] hover:from-[#A52A2A] hover:to-[#8B0000] text-white shadow-lg shadow-red-900/50 transition-all duration-300 hover:scale-105"
                           disabled={isProcessing}
                         >
                           {isProcessing ? 'Processing...' : 'Extract & Analyze'}
@@ -579,18 +651,18 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
 
                   {/* OCR Progress Bar */}
                   {isProcessing && (
-                    <div className="mt-6">
-                      <div className="flex justify-between text-sm text-gray-600 mb-2">
+                    <div className="mt-6 animate-fadeIn">
+                      <div className="flex justify-between text-sm text-[#4e2a2a] mb-2 font-medium">
                         <span>Extracting data with OCR...</span>
                         <span>{ocrProgress}%</span>
                       </div>
                       <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-gradient-to-r from-[#8B0000] to-[#B22222] transition-all duration-300"
+                          className="h-full bg-gradient-to-r from-[#8B0000] to-[#B22222] transition-all duration-500 rounded-full"
                           style={{ width: `${ocrProgress}%` }}
                         ></div>
                       </div>
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs text-[#4e2a2a] mt-2">
                         Our OCR technology is reading values from your report...
                       </p>
                     </div>
@@ -599,160 +671,125 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
               </Card>
             )}
 
-            {/* Camera Upload */}
-            {uploadMethod === 'camera' && (
-              <Card className="shadow-xl shadow-[#DC143C]/10">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <i className="fas fa-camera text-[#8B0000]"></i>
-                    Take Photo of Your Report
-                  </CardTitle>
-                  <CardDescription>
-                    Use your camera to capture a clear photo of your CBC report
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
-                    <div className="w-32 h-32 rounded-full bg-gradient-to-br from-[#FFE4E1] to-[#fff8f8] flex items-center justify-center mx-auto mb-6">
-                      <i className="fas fa-camera-retro text-4xl text-[#8B0000]"></i>
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                      Camera Access Required
-                    </h3>
-                    <p className="text-gray-600 mb-6">
-                      Please allow camera access to take a photo of your report.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                      <Button 
-                        className="bg-[#8B0000] hover:bg-[#B22222] text-white"
-                        onClick={() => {
-                          // In production, this would open camera
-                          alert('Camera feature would open here. For now, please use file upload.');
-                        }}
-                      >
-                        <i className="fas fa-camera mr-2"></i>
-                        Open Camera
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        onClick={() => setUploadMethod('file')}
-                      >
-                        <i className="fas fa-file-upload mr-2"></i>
-                        Upload File Instead
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <i className="fas fa-lightbulb text-amber-600 mt=1"></i>
-                      <div>
-                        <h4 className="font-semibold text-amber-800 mb-1">Tips for Best Results:</h4>
-                        <ul className="text-sm text-amber-700 space-y-1">
-                          <li>• Ensure good lighting and no shadows</li>
-                          <li>• Keep the report flat and in focus</li>
-                          <li>• Include all sections of the report</li>
-                          <li>• Avoid glare on the paper</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Manual Entry */}
             {uploadMethod === 'manual' && (
-              <Card className="shadow-xl shadow-[#DC143C]/10">
+              <Card className="shadow-2xl hover:shadow-red-900/30 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                     <i className="fas fa-keyboard text-[#8B0000]"></i>
                     Enter CBC Values Manually
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-[#4e2a2a]">
                     Enter your CBC values if OCR extraction failed or you prefer manual input
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="font-semibold text-[#2c1212]">
+                        Sex (for correct reference ranges)
+                        <span className="ml-2 text-xs font-normal text-gray-500">(Cleveland Clinic)</span>
+                      </label>
+                      <select
+                        value={manualGender || ''}
+                        onChange={(e) => {
+                          const v = e.target.value || null;
+                          setManualGender(v);
+                          if (onStateChange) {
+                            onStateChange({
+                              uploadMethod,
+                              extractedData,
+                              manualData,
+                              manualGender: v
+                            });
+                          }
+                        }}
+                        className="w-full px-4 py-2 border-2 rounded-lg bg-white focus:ring-2 focus:ring-[#8B0000] focus:border-transparent transition-all duration-300 border-gray-300 hover:border-[#8B0000]/50"
+                      >
+                        <option value="">Not specified</option>
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                      </select>
+                      <p className="text-xs text-gray-600">
+                        Hb/RBC/Hct ranges change based on selected sex.
+                      </p>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     {Object.entries(cbcReferenceRanges).map(([field, range]) => {
+                      const displayRange = getRangeForManualField(field) || range;
                       const inhumanError = manualData[field] ? validateInhumanValue(manualData[field], field) : null;
                       const hasError = inhumanError !== null;
                       
                       return (
-                        <div key={field} className="space-y-2">
+                        <div key={field} className="space-y-2 group">
                           <div className="flex justify-between items-center">
-                            <label className="font-medium text-gray-700 capitalize">
+                            <label className="font-semibold text-[#2c1212] capitalize group-hover:text-[#8B0000] transition-colors">
                               {field}
-                              {range.mandatory && (
-                                <span className="ml-1 text-red-500">*</span>
-                              )}
-                              <span className="ml-2 text-xs text-gray-500">
-                                ({range.unit})
-                              </span>
+                              {range.mandatory && <span className="ml-1 text-red-500">*</span>}
+                              <span className="ml-2 text-xs text-gray-500 font-normal">({displayRange.unit})</span>
                             </label>
                             {manualData[field] && !hasError && (
-                              <span className={`text-xs px-2 py-1 rounded-full ${
-                                getStatusColor(manualData[field], field)
-                              }`}>
+                              <span className={`text-xs px-2 py-1 rounded-full shadow-sm ${getStatusColor(manualData[field], field)}`}>
                                 <i className={`${getStatusIcon(manualData[field], field)} mr-1`}></i>
                                 {checkValueStatus(manualData[field], field)}
-                              </span>
-                            )}
-                            {hasError && (
-                              <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-800 border border-red-200">
-                                <i className="fas fa-exclamation-triangle mr-1"></i>
-                                Invalid
                               </span>
                             )}
                           </div>
                           <input
                             type="number"
-                            step="0.1"
-                            placeholder={`${range.min} - ${range.max}`}
+                            step={field === 'wbc' || field === 'platelets' ? "0.1" : "0.1"}
+                            placeholder={`${displayRange.min} - ${displayRange.max}`}
                             value={manualData[field]}
                             onChange={(e) => handleManualInputChange(field, e.target.value)}
-                            className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#8B0000] focus:border-transparent transition-all ${
+                            className={`w-full px-4 py-2 border-2 rounded-lg focus:ring-2 focus:ring-[#8B0000] focus:border-transparent transition-all duration-300 ${
                               hasError 
-                                ? 'border-red-300 bg-red-50' 
-                                : 'border-gray-300'
+                                ? 'border-red-400 bg-red-50' 
+                                : 'border-gray-300 hover:border-[#8B0000]/50'
                             }`}
-                            required={range.mandatory}
                           />
+                          {range.note && !hasError && manualData[field] && (
+                            <div className="text-xs text-gray-500 italic">
+                              <i className="fas fa-info-circle mr-1"></i>
+                              {range.note}
+                            </div>
+                          )}
                           {hasError && (
-                            <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
+                            <div className="text-xs text-red-700 bg-red-100 border border-red-300 rounded-lg p-2">
                               <i className="fas fa-exclamation-circle mr-1"></i>
                               {inhumanError}
                             </div>
                           )}
-                          {!hasError && (
-                            <div className="text-xs text-gray-500 flex justify-between">
-                              <span>Ref: {range.min}-{range.max}</span>
-                              {manualData[field] && (
-                                <span>
-                                  {parseFloat(manualData[field]) < range.min ? 'Below normal' : 
-                                   parseFloat(manualData[field]) > range.max ? 'Above normal' : 
-                                   'Normal'}
-                                </span>
-                              )}
+                          {!hasError && manualData[field] && (
+                            <div className="text-xs text-gray-600 flex justify-between">
+                              <span>Ref: {displayRange.min}-{displayRange.max} {displayRange.unit}</span>
+                              <span className="font-medium">
+                                {parseFloat(manualData[field]) < displayRange.min ? '⬇️ Below normal' : 
+                                 parseFloat(manualData[field]) > displayRange.max ? '⬆️ Above normal' : '✅ Normal'}
+                              </span>
                             </div>
                           )}
                         </div>
                       );
                     })}
                   </div>
-                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800">
+                  
+                  <div className="mb-4 p-3 bg-blue-100/80 backdrop-blur-sm border border-blue-300 rounded-lg shadow-inner">
+                    <p className="text-sm text-blue-900">
                       <i className="fas fa-info-circle mr-2"></i>
-                      <strong>Note:</strong> Fields marked with <span className="text-red-500">*</span> are mandatory. 
-                      Values outside physiologically possible ranges will be flagged.
+                      <strong>Note:</strong> Fields marked with <span className="text-red-600 font-bold">*</span> are mandatory.
+                      {uploadMethod === 'manual' && ' WBC and Platelets are in cells/µL. Differentials are in %.'}
                     </p>
                   </div>
                   
                   <div className="flex flex-col sm:flex-row gap-3">
                     <Button 
                       onClick={handleManualSubmit}
-                      className={`bg-[#8B0000] hover:bg-[#B22222] text-white shadow-lg ${!isManualFormValid ? 'opacity-60 cursor-not-allowed hover:bg-[#8B0000]' : ''}`}
-                      disabled={!isManualFormValid}
+                      className={`bg-gradient-to-r from-[#8B0000] to-[#B22222] hover:from-[#A52A2A] hover:to-[#8B0000] text-white shadow-lg shadow-red-900/50 transition-all duration-300 hover:scale-105 ${
+                        !isManualFormValid() ? 'opacity-60 cursor-not-allowed hover:scale-100' : ''
+                      }`}
+                      disabled={!isManualFormValid()}
                       size="lg"
                     >
                       <i className="fas fa-brain mr-2"></i>
@@ -761,25 +798,20 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                     <Button 
                       variant="outline"
                       onClick={() => setUploadMethod('file')}
+                      className="border-2 border-[#8B0000] text-[#8B0000] hover:bg-[#FFE4E1] hover:border-[#B22222] transition-all duration-300 hover:scale-105"
                     >
                       <i className="fas fa-file-upload mr-2"></i>
                       Try OCR Upload Instead
                     </Button>
                   </div>
-                  {!isManualFormValid && (
-                    <p className="text-sm text-gray-500 mt-2">
-                      <i className="fas fa-info-circle mr-1"></i>
-                      Fill all fields above with valid numbers to enable Analyze with AI.
-                    </p>
-                  )}
                 </CardContent>
               </Card>
             )}
 
             {/* OCR Results Preview */}
             {extractedData && !isProcessing && (
-              <Card className="shadow-lg border border-green-200">
-                <CardHeader className="bg-green-50 border-b border-green-200">
+              <Card className="shadow-2xl border border-green-300 bg-white/95 backdrop-blur-sm animate-fadeIn">
+                <CardHeader className="bg-gradient-to-r from-green-100 to-green-50 border-b border-green-200">
                   <CardTitle className="flex items-center gap-2 text-green-800">
                     <i className="fas fa-check-circle"></i>
                     Data Extracted Successfully!
@@ -788,77 +820,40 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                 <CardContent className="p-6">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
-                      <h4 className="font-semibold text-gray-900">{extractedData.fileName}</h4>
-                      <p className="text-sm text-gray-600">Extracted on {extractedData.date}</p>
+                      <h4 className="font-semibold text-[#2c1212]">{extractedData.fileName}</h4>
+                      <p className="text-sm text-[#4e2a2a]">Extracted on {extractedData.date}</p>
                     </div>
-                    <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                    <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium shadow-md">
                       <i className="fas fa-robot mr-1"></i>
                       AI Ready
                     </span>
                   </div>
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {STANDARD_CBC_PARAMS.map((field) => {
-                      const raw =
-                        extractedData.cbc_parameters?.[field] ??
-                        (extractedData.values[field] !== undefined ? extractedData.values[field] : null);
-                      const value =
-                        raw === null || raw === undefined || raw === ''
-                          ? null
-                          : typeof raw === 'number'
-                            ? raw
-                            : parseFloat(raw);
-                      const display =
-                        value === null || Number.isNaN(value) ? '—' : String(value);
+                    {Object.entries(extractedData.values).map(([field, value]) => {
+                      const range = cbcReferenceRanges[field];
                       return (
-                        <div
+                        <div 
                           key={field}
-                          className={`p-3 rounded-lg border ${
-                            display === '—' ? 'text-gray-500 bg-gray-50 border-gray-200' : getStatusColor(display, field)
+                          className={`p-3 rounded-lg border shadow-sm transition-all hover:scale-105 duration-300 ${
+                            getStatusColor(value, field)
                           }`}
                         >
                           <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-medium text-gray-700">
-                              {CBC_FIELD_LABELS[field] || field}
-                            </span>
-                            <i className={`${getStatusIcon(display === '—' ? '' : display, field)} text-sm`}></i>
+                            <span className="text-xs font-semibold text-gray-700 capitalize">{field}</span>
+                            <i className={`${getStatusIcon(value, field)} text-sm`}></i>
                           </div>
-                          <div className={`text-lg font-bold ${display === '—' ? 'text-gray-400' : ''}`}>
-                            {display}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {cbcReferenceRanges[field]?.unit || ''}
-                          </div>
+                          <div className="text-lg font-bold">{value}</div>
+                          <div className="text-xs text-gray-600">{range?.unit || 'units'}</div>
                         </div>
                       );
                     })}
                   </div>
-
-                  {extractedData.serverCbcDebug && (
-                    <div className="mt-6 border-t border-dashed border-gray-300 pt-4">
-                      <p className="text-sm font-semibold text-gray-800 mb-2">
-                        <i className="fas fa-bug mr-2 text-amber-600" aria-hidden />
-                        Debug: CBC JSON from server (14 fields)
-                      </p>
-                      <p className="text-xs text-gray-600 mb-2">
-                        Values below are taken directly from the upload API response (
-                        <code className="bg-gray-100 px-1 rounded">cbc_parameters</code> and{' '}
-                        <code className="bg-gray-100 px-1 rounded">haematology_report</code>
-                        ), not from the grid above.
-                      </p>
-                      <pre
-                        className="text-xs bg-gray-950 text-emerald-400 p-4 rounded-lg overflow-x-auto max-h-[28rem] overflow-y-auto font-mono leading-relaxed border border-gray-700"
-                        tabIndex={0}
-                      >
-                        {JSON.stringify(extractedData.serverCbcDebug, null, 2)}
-                      </pre>
-                    </div>
-                  )}
                   
                   <div className="mt-6 flex gap-3">
                     <Button 
                       onClick={handleFileSubmit}
-                      className="bg-[#8B0000] hover:bg-[#B22222] text-white flex-1"
+                      className="bg-gradient-to-r from-[#8B0000] to-[#B22222] hover:from-[#A52A2A] hover:to-[#8B0000] text-white shadow-lg shadow-red-900/50 flex-1 transition-all duration-300 hover:scale-105"
                     >
                       <i className="fas fa-chart-line mr-2"></i>
                       Analyze with AI
@@ -869,6 +864,7 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
                         setExtractedData(null);
                         setSelectedFile(null);
                       }}
+                      className="border-2 border-gray-400 text-[#4e2a2a] hover:border-[#8B0000] hover:text-[#8B0000] transition-all duration-300 hover:scale-105"
                     >
                       <i className="fas fa-redo mr-2"></i>
                       Upload Another
@@ -879,120 +875,144 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
             )}
           </div>
 
-          {/* Right Column - Instructions & Features */}
+          {/* Right Column - Features */}
           <div className="space-y-6">
-            {/* How It Works */}
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <i className="fas fa-info-circle text-[#8B0000]"></i>
-                  How It Works
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[
-                    { icon: 'fa-upload', title: 'Upload Report', desc: 'Upload your CBC report as PDF or image' },
-                    { icon: 'fa-search', title: 'OCR Extraction', desc: 'Our AI extracts all values automatically' },
-                    { icon: 'fa-brain', title: 'AI Analysis', desc: 'ML models analyze and detect abnormalities' },
-                    { icon: 'fa-chart-line', title: 'Get Insights', desc: 'Receive clear explanations & trends' }
-                  ].map((step, index) => (
-                    <div key={index} className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#FFE4E1] flex items-center justify-center flex-shrink-0">
-                        <i className={`fas ${step.icon} text-[#8B0000]`}></i>
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900">{step.title}</h4>
-                        <p className="text-sm text-gray-600">{step.desc}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Supported Formats */}
-            <Card className="shadow-lg">
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                   <i className="fas fa-file-alt text-[#8B0000]"></i>
                   Supported Formats
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {[
-                    { format: 'PDF Reports', icon: 'fa-file-pdf', color: 'text-red-500' },
-                    { format: 'JPG Images', icon: 'fa-file-image', color: 'text-green-500' },
-                    { format: 'PNG Images', icon: 'fa-file-image', color: 'text-blue-500' },
-                    { format: 'Camera Photos', icon: 'fa-camera', color: 'text-purple-500' }
-                  ].map((item, index) => (
-                    <div key={index} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
-                      <i className={`fas ${item.icon} ${item.color} text-lg`}></i>
-                      <span className="font-medium">{item.format}</span>
-                      <span className="ml-auto text-xs text-gray-500 px-2 py-1 bg-gray-100 rounded">
-                        Supported
-                      </span>
+                  <div className="flex items-center gap-3 p-3 hover:bg-gradient-to-r hover:from-[#FFE4E1] hover:to-transparent rounded-lg transition-all duration-300 group cursor-pointer">
+                    <i className="fas fa-file-image text-green-600 text-xl group-hover:scale-110 transition-transform"></i>
+                    <span className="font-semibold text-gray-700 group-hover:text-[#8B0000] transition-colors">JPG Images</span>
+                    <span className="ml-auto text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full shadow-sm">Supported</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 hover:bg-gradient-to-r hover:from-[#FFE4E1] hover:to-transparent rounded-lg transition-all duration-300 group cursor-pointer">
+                    <i className="fas fa-file-image text-blue-600 text-xl group-hover:scale-110 transition-transform"></i>
+                    <span className="font-semibold text-gray-700 group-hover:text-[#8B0000] transition-colors">PNG Images</span>
+                    <span className="ml-auto text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full shadow-sm">Supported</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* AI Features */}
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-[#2c1212]">
+                  <i className="fas fa-magic text-[#8B0000]"></i>
+                  AI Features
+                </CardTitle>
+                <CardDescription className="text-[#4e2a2a]">
+                  Click on any feature to learn more
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {aiFeatures.map((feature, index) => (
+                    <div key={index} className="group">
+                      <div 
+                        className={`p-4 rounded-xl cursor-pointer transition-all duration-300 ${
+                          expandedFeature === index 
+                            ? 'bg-gradient-to-r from-[#8B0000] to-[#B22222] text-white shadow-xl'
+                            : 'bg-white border-2 border-gray-200 hover:border-[#8B0000] hover:shadow-lg'
+                        }`}
+                        onClick={() => setExpandedFeature(expandedFeature === index ? null : index)}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-300 ${
+                            expandedFeature === index ? 'bg-white/20' : 'bg-gradient-to-br from-[#FFE4E1] to-[#fff8f8] group-hover:scale-110'
+                          }`}>
+                            <i className={`fas ${feature.icon} text-xl ${expandedFeature === index ? 'text-white' : 'text-[#8B0000]'}`}></i>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <h4 className={`font-bold text-lg ${expandedFeature === index ? 'text-white' : 'text-[#2c1212]'}`}>
+                                {feature.title}
+                              </h4>
+                              <i className={`fas fa-chevron-down transition-transform duration-300 ${expandedFeature === index ? 'rotate-180' : ''} ${expandedFeature === index ? 'text-white' : 'text-[#8B0000]'}`}></i>
+                            </div>
+                            <p className={`text-sm mt-1 ${expandedFeature === index ? 'text-white/90' : 'text-gray-600'}`}>
+                              {feature.shortDesc}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {expandedFeature === index && (
+                        <div className="mt-2 p-4 bg-gradient-to-r from-[#FFF0EE] to-[#FFE4E1] rounded-xl shadow-inner animate-slideDown">
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-full bg-[#8B0000]/10 flex items-center justify-center flex-shrink-0">
+                              <i className={`fas ${feature.icon} text-[#8B0000] text-sm`}></i>
+                            </div>
+                            <div>
+                              <p className="text-sm text-[#4e2a2a] leading-relaxed">{feature.longDesc}</p>
+                              <button 
+                                className="mt-3 text-xs font-semibold text-[#8B0000] hover:text-[#B22222] transition-colors"
+                                onClick={() => setExpandedFeature(null)}
+                              >
+                                <i className="fas fa-times-circle mr-1"></i>
+                                Close
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
 
-            {/* AI Features Preview */}
-            <Card className="shadow-lg bg-gradient-to-br from-[#fff8f8] to-white">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <i className="fas fa-magic text-[#8B0000]"></i>
-                  AI Features
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <i className="fas fa-robot text-[#8B0000]"></i>
-                      <h4 className="font-semibold">ML Diagnosis</h4>
-                    </div>
-                    <p className="text-sm text-gray-600">
-                      Detects conditions like anemia, infection risks, and more
-                    </p>
-                  </div>
-                  
-                  <div className="p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <i className="fas fa-chart-line text-[#8B0000]"></i>
-                      <h4 className="font-semibold">Trend Analysis</h4>
-                    </div>
-                    <p className="text-sm text-gray-600">
-                      Tracks your health parameters over time
-                    </p>
-                  </div>
-                  
-                  <div className="p-3 bg-white rounded-lg border border-gray-200">
-                    <div className="flex items-center gap-2 mb-2">
-                      <i className="fas fa-apple-alt text-[#8B0000]"></i>
-                      <h4 className="font-semibold">Personalized Tips</h4>
-                    </div>
-                    <p className="text-sm text-gray-600">
-                      Diet and lifestyle recommendations based on your results
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Disclaimer */}
-            <Alert className="border-amber-200 bg-amber-50">
-              <i className="fas fa-exclamation-triangle text-amber-600 mt-1"></i>
+            <Alert className="border-amber-300 bg-amber-100/90 backdrop-blur-sm shadow-lg">
+              <i className="fas fa-exclamation-triangle text-amber-700 mt-1"></i>
               <AlertDescription className="text-amber-800">
-                <strong>Note:</strong> This tool helps you understand your reports. 
+                <strong className="font-semibold">Medical Disclaimer:</strong> This tool helps you understand your reports. 
                 Always consult with a healthcare professional for medical advice.
               </AlertDescription>
             </Alert>
           </div>
         </div>
       </div>
+
+      {/* Animation keyframes */}
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .animate-fadeIn {
+          animation: fadeIn 0.5s ease-out;
+        }
+        
+        .animate-slideDown {
+          animation: slideDown 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 };

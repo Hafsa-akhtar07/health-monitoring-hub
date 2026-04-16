@@ -10,34 +10,88 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
+  ComposedChart,
+  Area
 } from 'recharts';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
 
+const DIFF_KEYS = new Set(['neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils']);
+
+function trendToNum(v) {
+  const n = v === null || v === undefined || v === '' ? NaN : parseFloat(v);
+  return Number.isNaN(n) ? null : n;
+}
+
+/** Align stored trend points with ResultsDisplay / analyze: cells/µL for WBC & platelets; differentials as % when WBC is known. */
+function normalizeTrendScalar(param, raw, wbcNormalizedForReport) {
+  const v = trendToNum(raw);
+  if (v == null || v < 0) return raw;
+
+  if (param === 'wbc' && v > 0 && v < 200) return v * 1000;
+  if (param === 'platelets' && v > 0 && v < 5000) return v * 1000;
+
+  if (DIFF_KEYS.has(param)) {
+    if (v >= 0 && v <= 100) return v;
+    const wbc = trendToNum(wbcNormalizedForReport);
+    if (wbc != null && wbc > 0) {
+      const diffAbs = v > 0 && v < 200 ? v * 1000 : v;
+      const pct = (diffAbs / wbc) * 100;
+      if (pct >= 0 && pct <= 100) return Math.round(pct * 100) / 100;
+    }
+    return v;
+  }
+
+  return v;
+}
+
+function formatTrendDisplayValue(param, raw) {
+  const v = trendToNum(raw);
+  if (v == null) return '—';
+  if (param === 'wbc' || param === 'platelets') return Math.round(v).toLocaleString('en-US');
+  if (param === 'hemoglobin' || param === 'mch' || param === 'mchc' || param === 'rbc') return v.toFixed(2);
+  if (param === 'mcv' || param === 'hematocrit' || param === 'rdw') return v.toFixed(1);
+  if (DIFF_KEYS.has(param)) return v.toFixed(1);
+  return String(raw);
+}
+
 function HistoryGraph({ userId = null, onNavigate }) {
   const [reports, setReports] = useState([]);
-  const [selectedParameters, setSelectedParameters] = useState(['hemoglobin']); // Multiple parameters can be selected
+  const [selectedParameters, setSelectedParameters] = useState(['hemoglobin', 'wbc', 'platelets']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [allData, setAllData] = useState({});
-  const [viewMode, setViewMode] = useState('table'); // 'table' or 'graph'
+  const [viewMode, setViewMode] = useState('table');
+  const [chartType, setChartType] = useState('line');
 
-  // Color scheme: Using distinct, accessible colors for medical parameters
-  // Red tones for critical parameters (hemoglobin, hematocrit - blood-related)
-  // Green/Blue for cell counts (RBC, WBC, platelets)
-  // Purple/Pink for indices (MCV, MCH, MCHC)
+  // All 14 CBC parameters with carefully chosen colors
   const parameters = [
-    { value: 'hemoglobin', label: 'Hemoglobin', unit: 'g/dL', color: '#8B0000' }, // Dark red - blood protein
-    { value: 'rbc', label: 'RBC', unit: '×10⁶/µL', color: '#10b981' }, // Green - red blood cells
-    { value: 'wbc', label: 'WBC', unit: '×10³/µL', color: '#3B82F6' }, // Blue - white blood cells
-    { value: 'platelets', label: 'Platelets', unit: '×10³/µL', color: '#8b5cf6' }, // Purple - platelets
-    { value: 'hematocrit', label: 'Hematocrit', unit: '%', color: '#ef4444' }, // Red - blood volume
-    { value: 'mcv', label: 'MCV', unit: 'fL', color: '#f59e0b' }, // Orange - cell size
-    { value: 'mch', label: 'MCH', unit: 'pg', color: '#EC4899' }, // Pink - hemoglobin per cell
-    { value: 'mchc', label: 'MCHC', unit: 'g/dL', color: '#14B8A6' } // Teal - concentration
+    { value: 'hemoglobin', label: 'Hemoglobin', unit: 'g/dL', color: '#8B0000', group: 'RBC' },
+    { value: 'rbc', label: 'RBC', unit: 'million cells/µL', color: '#DC143C', group: 'RBC' },
+    { value: 'wbc', label: 'WBC', unit: 'cells/µL', color: '#2563EB', group: 'WBC' },
+    { value: 'platelets', label: 'Platelets', unit: 'cells/µL', color: '#7C3AED', group: 'Platelets' },
+    { value: 'hematocrit', label: 'Hematocrit', unit: '%', color: '#EF4444', group: 'RBC' },
+    { value: 'mcv', label: 'MCV', unit: 'fL', color: '#F59E0B', group: 'Indices' },
+    { value: 'mch', label: 'MCH', unit: 'pg', color: '#EC4899', group: 'Indices' },
+    { value: 'mchc', label: 'MCHC', unit: 'g/dL', color: '#14B8A6', group: 'Indices' },
+    { value: 'neutrophils', label: 'Neutrophils', unit: '%', color: '#3B82F6', group: 'Differential' },
+    { value: 'lymphocytes', label: 'Lymphocytes', unit: '%', color: '#06B6D4', group: 'Differential' },
+    { value: 'monocytes', label: 'Monocytes', unit: '%', color: '#8B5CF6', group: 'Differential' },
+    { value: 'eosinophils', label: 'Eosinophils', unit: '%', color: '#10B981', group: 'Differential' },
+    { value: 'basophils', label: 'Basophils', unit: '%', color: '#F97316', group: 'Differential' },
+    { value: 'rdw', label: 'RDW', unit: '%', color: '#A855F7', group: 'Indices' }
   ];
+
+  // Group colors for legend
+  const groupColors = {
+    'RBC': '#DC143C',
+    'WBC': '#2563EB',
+    'Platelets': '#7C3AED',
+    'Indices': '#F59E0B',
+    'Differential': '#10B981'
+  };
 
   useEffect(() => {
     fetchReports();
@@ -47,7 +101,6 @@ function HistoryGraph({ userId = null, onNavigate }) {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      // No need to send userId - backend uses authenticated user from token
       const response = await api.get('/history');
       setReports(response.data.reports || []);
     } catch (err) {
@@ -62,7 +115,6 @@ function HistoryGraph({ userId = null, onNavigate }) {
     setError(null);
     try {
       const dataPromises = parameters.map(param => {
-        // No need to send userId - backend uses authenticated user from token
         const params = { parameter: param.value };
         return api.get('/history/trends', { params })
           .then(res => ({ param: param.value, data: res.data.data }))
@@ -70,10 +122,30 @@ function HistoryGraph({ userId = null, onNavigate }) {
       });
 
       const results = await Promise.all(dataPromises);
-      const dataMap = {};
-      results.forEach(result => {
-        dataMap[result.param] = result.data;
+      const rawMap = {};
+      results.forEach((result) => {
+        rawMap[result.param] = Array.isArray(result.data) ? result.data.map((row) => ({ ...row })) : [];
       });
+
+      const wbcRows = (rawMap.wbc || []).map((row) => ({
+        ...row,
+        value: normalizeTrendScalar('wbc', row.value, null)
+      }));
+      const wbcByReportId = {};
+      wbcRows.forEach((row) => {
+        if (row.reportId != null) wbcByReportId[row.reportId] = row.value;
+      });
+
+      const dataMap = { wbc: wbcRows };
+      parameters.forEach((p) => {
+        if (p.value === 'wbc') return;
+        const rows = rawMap[p.value] || [];
+        dataMap[p.value] = rows.map((row) => ({
+          ...row,
+          value: normalizeTrendScalar(p.value, row.value, wbcByReportId[row.reportId])
+        }));
+      });
+
       setAllData(dataMap);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load trend data');
@@ -91,17 +163,15 @@ function HistoryGraph({ userId = null, onNavigate }) {
     });
   };
 
-  // Merge multiple parameters data for comparison chart
   const getMergedChartData = () => {
     if (selectedParameters.length === 0) return [];
 
-    // Create a map to merge all selected parameters by date
     const dateMap = {};
     
     selectedParameters.forEach(paramValue => {
       const paramData = allData[paramValue] || [];
       paramData.forEach(item => {
-        const dateKey = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const dateKey = new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         if (!dateMap[dateKey]) {
           dateMap[dateKey] = { date: dateKey, fullDate: item.date };
         }
@@ -116,16 +186,23 @@ function HistoryGraph({ userId = null, onNavigate }) {
     const paramInfo = parameters.find(p => p.value === param);
     if (!paramInfo || !value) return 'text-gray-600';
     
-    // Reference ranges (simplified)
     const ranges = {
-      hemoglobin: { min: 13.5, max: 17.5 },
-      rbc: { min: 4.5, max: 5.9 },
-      wbc: { min: 4.5, max: 11.0 },
-      platelets: { min: 150, max: 450 },
-      hematocrit: { min: 41, max: 53 },
+      // Cleveland Clinic (adults). Mixed-sex envelope for UI coloring.
+      hemoglobin: { min: 11.5, max: 17.0 },
+      rbc: { min: 4.0, max: 6.1 },
+      wbc: { min: 4000, max: 10000 },
+      platelets: { min: 150000, max: 400000 },
+      hematocrit: { min: 36, max: 55 },
       mcv: { min: 80, max: 100 },
-      mch: { min: 27, max: 33 },
-      mchc: { min: 32, max: 36 }
+      mch: { min: 27, max: 31 },
+      mchc: { min: 32, max: 36 },
+      // Differentials in %
+      neutrophils: { min: 40, max: 80 },
+      lymphocytes: { min: 20, max: 40 },
+      monocytes: { min: 2, max: 10 },
+      eosinophils: { min: 1, max: 6 },
+      basophils: { min: 0, max: 1 },
+      rdw: { min: 12, max: 15 }
     };
     
     const range = ranges[param];
@@ -142,207 +219,138 @@ function HistoryGraph({ userId = null, onNavigate }) {
   const handleParameterToggle = (paramValue) => {
     setSelectedParameters(prev => {
       if (prev.includes(paramValue)) {
-        // Remove if already selected (but keep at least one)
         if (prev.length > 1) {
           return prev.filter(p => p !== paramValue);
         }
-        return prev; // Keep at least one selected
+        return prev;
       } else {
-        // Add to selection
         return [...prev, paramValue];
       }
     });
   };
 
-  const calculateTrend = () => {
-    if (selectedParameters.length === 0 || chartData.length < 2) return null;
-    
-    // Calculate trend for the first selected parameter
-    const firstParam = selectedParameters[0];
-    const paramData = allData[firstParam] || [];
-    if (paramData.length < 2) return null;
-    
-    const firstValue = paramData[0].value;
-    const lastValue = paramData[paramData.length - 1].value;
-    const change = ((lastValue - firstValue) / firstValue) * 100;
-    const paramLabel = parameters.find(p => p.value === firstParam)?.label || 'Parameter';
-    
-    let message = '';
-    if (Math.abs(change) < 1) {
-      message = `Your ${paramLabel} has remained stable over the last ${paramData.length} tests.`;
-    } else if (change > 0) {
-      message = `Your ${paramLabel} has improved by ${Math.abs(change).toFixed(1)}% over the last ${paramData.length} tests — keep it up!`;
-    } else {
-      message = `Your ${paramLabel} has decreased by ${Math.abs(change).toFixed(1)}% over the last ${paramData.length} tests. Consider consulting your doctor.`;
-    }
-
-    // Add comparison info if multiple parameters are selected
-    if (selectedParameters.length > 1) {
-      const otherParams = selectedParameters.slice(1).map(p => parameters.find(param => param.value === p)?.label).join(', ');
-      message += ` Comparing with ${otherParams} to analyze correlations.`;
-    }
-    
-    return {
-      message,
-      type: Math.abs(change) < 1 ? 'stable' : change > 0 ? 'improving' : 'declining',
-      color: Math.abs(change) < 1 ? 'bg-blue-50 border-blue-200 text-blue-800' : change > 0 ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'
-    };
+  const handleSelectGroup = (group) => {
+    const groupParams = parameters.filter(p => p.group === group).map(p => p.value);
+    setSelectedParameters(groupParams);
   };
 
-  const trendInfo = calculateTrend();
+  const handleSelectAll = () => {
+    setSelectedParameters(parameters.map(p => p.value));
+  };
 
-  // Calculate detailed analysis for each selected parameter
+  const handleClearAll = () => {
+    setSelectedParameters(['hemoglobin']);
+  };
+
   const getParameterAnalysis = (paramValue) => {
     const paramData = allData[paramValue] || [];
     if (paramData.length < 2) return null;
 
     const param = parameters.find(p => p.value === paramValue);
-    const firstValue = paramData[0].value;
-    const lastValue = paramData[paramData.length - 1].value;
-    const change = ((lastValue - firstValue) / firstValue) * 100;
-    const avgValue = paramData.reduce((sum, item) => sum + item.value, 0) / paramData.length;
-    const minValue = Math.min(...paramData.map(item => item.value));
-    const maxValue = Math.max(...paramData.map(item => item.value));
-    
-    // Reference ranges
+    const firstValue = trendToNum(paramData[0].value);
+    const lastValue = trendToNum(paramData[paramData.length - 1].value);
+    if (firstValue == null || lastValue == null) return null;
+
+    const avgValue =
+      paramData.reduce((sum, item) => sum + (trendToNum(item.value) ?? 0), 0) / paramData.length;
+
     const ranges = {
-      hemoglobin: { min: 13.5, max: 17.5, normal: 'Normal range: 13.5-17.5 g/dL' },
-      rbc: { min: 4.5, max: 5.9, normal: 'Normal range: 4.5-5.9 ×10⁶/µL' },
-      wbc: { min: 4.5, max: 11.0, normal: 'Normal range: 4.5-11.0 ×10³/µL' },
-      platelets: { min: 150, max: 450, normal: 'Normal range: 150-450 ×10³/µL' },
-      hematocrit: { min: 41, max: 53, normal: 'Normal range: 41-53%' },
-      mcv: { min: 80, max: 100, normal: 'Normal range: 80-100 fL' },
-      mch: { min: 27, max: 33, normal: 'Normal range: 27-33 pg' },
-      mchc: { min: 32, max: 36, normal: 'Normal range: 32-36 g/dL' }
+      // Cleveland Clinic (adults). Mixed-sex envelope for UI analysis.
+      hemoglobin: { min: 11.5, max: 17.0 },
+      rbc: { min: 4.0, max: 6.1 },
+      wbc: { min: 4000, max: 10000 },
+      platelets: { min: 150000, max: 400000 },
+      hematocrit: { min: 36, max: 55 },
+      mcv: { min: 80, max: 100 },
+      mch: { min: 27, max: 31 },
+      mchc: { min: 32, max: 36 },
+      neutrophils: { min: 40, max: 80 },
+      lymphocytes: { min: 20, max: 40 },
+      monocytes: { min: 2, max: 10 },
+      eosinophils: { min: 1, max: 6 },
+      basophils: { min: 0, max: 1 },
+      rdw: { min: 12, max: 15 }
     };
 
     const range = ranges[paramValue];
-    const isInRange = lastValue >= range.min && lastValue <= range.max;
-    const status = isInRange ? 'normal' : lastValue < range.min ? 'low' : 'high';
-    
-    // Determine trend - only consider it "stable" if change is very small (< 1%)
-    const trend = Math.abs(change) < 1 ? 'stable' : change > 0 ? 'increasing' : 'decreasing';
-    
-    // Combine status and trend for better description
+    const isInRange = range && lastValue >= range.min && lastValue <= range.max;
+    const status = !range ? 'normal' : isInRange ? 'normal' : lastValue < range.min ? 'low' : 'high';
+
+    let trend;
+    if (paramValue === 'wbc') {
+      const delta = lastValue - firstValue;
+      trend = Math.abs(delta) < 150 ? 'stable' : delta > 0 ? 'increasing' : 'decreasing';
+    } else if (paramValue === 'platelets') {
+      const delta = lastValue - firstValue;
+      trend = Math.abs(delta) < 8000 ? 'stable' : delta > 0 ? 'increasing' : 'decreasing';
+    } else {
+      const denom = Math.abs(firstValue) > 1e-9 ? firstValue : 1;
+      const pct = ((lastValue - firstValue) / denom) * 100;
+      trend = Math.abs(pct) < 1 ? 'stable' : pct > 0 ? 'increasing' : 'decreasing';
+    }
+
     let combinedDescription = '';
     if (status === 'low') {
-      combinedDescription = trend === 'decreasing' ? 'Low and decreasing' : 
-                           trend === 'increasing' ? 'Low but improving' : 
-                           'Low and stable';
+      combinedDescription = trend === 'decreasing' ? 'Low and decreasing' :
+                           trend === 'increasing' ? 'Low but improving' : 'Low and stable';
     } else if (status === 'high') {
-      combinedDescription = trend === 'increasing' ? 'High and increasing' : 
-                           trend === 'decreasing' ? 'High but improving' : 
-                           'High and stable';
+      combinedDescription = trend === 'increasing' ? 'High and increasing' :
+                           trend === 'decreasing' ? 'High but improving' : 'High and stable';
     } else {
-      combinedDescription = trend === 'increasing' ? 'Normal and increasing' : 
-                           trend === 'decreasing' ? 'Normal but decreasing' : 
-                           'Normal and stable';
+      combinedDescription = trend === 'increasing' ? 'Normal and increasing' :
+                           trend === 'decreasing' ? 'Normal but decreasing' : 'Normal and stable';
     }
+
+    const firstFmt = formatTrendDisplayValue(paramValue, firstValue);
+    const lastFmt = formatTrendDisplayValue(paramValue, lastValue);
 
     return {
       param: param?.label || paramValue,
       unit: param?.unit || '',
       color: param?.color || '#8B0000',
       trend,
-      change: change.toFixed(1),
-      avgValue: avgValue.toFixed(2),
-      minValue: minValue.toFixed(2),
-      maxValue: maxValue.toFixed(2),
-      lastValue: lastValue.toFixed(2),
+      avgValue: formatTrendDisplayValue(paramValue, avgValue),
+      lastValue: lastFmt,
+      firstValue: firstFmt,
+      firstToLatest: `First: ${firstFmt} → Latest: ${lastFmt} ${param?.unit || ''}`.trim(),
       status,
       combinedDescription,
-      range: range.normal,
       dataPoints: paramData.length
     };
   };
 
-  // Get comparison insights
-  const getComparisonInsights = () => {
-    if (selectedParameters.length < 2) return null;
+  // Group parameters for selection UI
+  const groupedParameters = parameters.reduce((acc, param) => {
+    if (!acc[param.group]) acc[param.group] = [];
+    acc[param.group].push(param);
+    return acc;
+  }, {});
 
-    const insights = [];
-    const paramAnalyses = selectedParameters.map(p => getParameterAnalysis(p)).filter(Boolean);
-
-    // Check for correlations
-    if (selectedParameters.includes('hemoglobin') && selectedParameters.includes('hematocrit')) {
-      insights.push({
-        type: 'correlation',
-        title: 'Hemoglobin & Hematocrit Correlation',
-        description: 'These parameters are closely related. Hemoglobin is the protein in red blood cells, and hematocrit is the percentage of red blood cells in blood. They typically move together - if one increases, the other usually does too.',
-        icon: 'fa-link'
-      });
-    }
-
-    if (selectedParameters.includes('hemoglobin') && selectedParameters.includes('rbc')) {
-      insights.push({
-        type: 'correlation',
-        title: 'Hemoglobin & RBC Relationship',
-        description: 'Red blood cells carry hemoglobin. When RBC count is normal but hemoglobin is low, it may indicate smaller or paler red blood cells (microcytic/hypochromic anemia).',
-        icon: 'fa-microscope'
-      });
-    }
-
-    if (selectedParameters.includes('mcv') && selectedParameters.includes('mch')) {
-      insights.push({
-        type: 'correlation',
-        title: 'MCV & MCH Analysis',
-        description: 'MCV (Mean Cell Volume) and MCH (Mean Cell Hemoglobin) help classify anemia types. Low values suggest iron deficiency, while high values may indicate B12/folate deficiency.',
-        icon: 'fa-chart-area'
-      });
-    }
-
-    if (selectedParameters.includes('wbc') && selectedParameters.includes('platelets')) {
-      insights.push({
-        type: 'correlation',
-        title: 'WBC & Platelets Monitoring',
-        description: 'Both are important for immune function and clotting. Changes in both together may indicate infection, inflammation, or bone marrow issues.',
-        icon: 'fa-shield-alt'
-      });
-    }
-
-    // Check for opposite trends
-    const trends = paramAnalyses.map(a => a.trend);
-    if (trends.includes('increasing') && trends.includes('decreasing')) {
-      insights.push({
-        type: 'warning',
-        title: 'Opposite Trends Detected',
-        description: 'Some parameters are increasing while others are decreasing. This may indicate a complex health condition requiring medical attention.',
-        icon: 'fa-exclamation-triangle'
-      });
-    }
-
-    // Check if all are stable
-    if (trends.every(t => t === 'stable')) {
-      insights.push({
-        type: 'positive',
-        title: 'Stable Parameters',
-        description: 'All selected parameters are showing stable trends, which is generally a positive sign of consistent health.',
-        icon: 'fa-check-circle'
-      });
-    }
-
-    return insights;
-  };
-
-    return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#fff8f8] to-[#FFE4E1] p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+  return (
+    <div className="min-h-screen p-4 md:p-8 relative overflow-hidden" style={{
+      background: 'linear-gradient(180deg, #fff5f5 0%, #ffe0e0 10%, #ffcccc 20%, #ffb3b3 35%, #ff9999 50%, #ff8080 65%, #e06666 80%, #cc4d4d 90%, #b33b3b 100%)',
+      backgroundAttachment: 'fixed'
+    }}>
+      <div className="max-w-7xl mx-auto relative z-10">
         {/* Header */}
         <div className="mb-6 md:mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-[#8B0000] mb-2">
+          <h1 className="text-3xl md:text-4xl font-bold text-[#2c1212] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
             History & Trends
           </h1>
-          <p className="text-gray-600 max-w-3xl">
-            View your complete health history, track trends over time, and analyze patterns in your CBC reports.
+          <p className="text-[#4e2a2a] font-medium max-w-3xl">
+            View your complete health history, track trends over time, and analyze patterns across all 14 CBC parameters.
           </p>
         </div>
 
         {/* View Mode Toggle */}
-        <div className="mb-6 flex gap-4">
+        <div className="mb-6 flex flex-wrap gap-4">
           <Button
             variant={viewMode === 'table' ? 'default' : 'outline'}
             onClick={() => setViewMode('table')}
-            className={viewMode === 'table' ? 'bg-[#8B0000] hover:bg-[#B22222] text-white' : ''}
+            className={viewMode === 'table' 
+              ? 'bg-gradient-to-r from-[#8B0000] to-[#B22222] text-white shadow-lg shadow-red-900/50 transition-all duration-300 hover:scale-105' 
+              : 'border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 hover:scale-105'
+            }
           >
             <i className="fas fa-table mr-2"></i>
             Data Table
@@ -350,7 +358,10 @@ function HistoryGraph({ userId = null, onNavigate }) {
           <Button
             variant={viewMode === 'graph' ? 'default' : 'outline'}
             onClick={() => setViewMode('graph')}
-            className={viewMode === 'graph' ? 'bg-[#8B0000] hover:bg-[#B22222] text-white' : ''}
+            className={viewMode === 'graph' 
+              ? 'bg-gradient-to-r from-[#8B0000] to-[#B22222] text-white shadow-lg shadow-red-900/50 transition-all duration-300 hover:scale-105' 
+              : 'border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 hover:scale-105'
+            }
           >
             <i className="fas fa-chart-line mr-2"></i>
             Trends & Graphs
@@ -358,8 +369,8 @@ function HistoryGraph({ userId = null, onNavigate }) {
           {onNavigate && (
             <Button
               variant="outline"
-              onClick={() => onNavigate('upload')}
-              className="ml-auto"
+              onClick={() => onNavigate('upload', { resetUploadState: true })}
+              className="border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 hover:scale-105 ml-auto"
             >
               <i className="fas fa-plus mr-2"></i>
               Add New Report
@@ -367,8 +378,36 @@ function HistoryGraph({ userId = null, onNavigate }) {
           )}
         </div>
 
+        {/* Chart Type Selector for Graph View */}
+        {viewMode === 'graph' && selectedParameters.length > 0 && (
+          <div className="mb-4 flex gap-2">
+            <Button
+              size="sm"
+              variant={chartType === 'line' ? 'default' : 'outline'}
+              onClick={() => setChartType('line')}
+              className={chartType === 'line' 
+                ? 'bg-gradient-to-r from-[#8B0000] to-[#B22222] text-white' 
+                : 'border-[#8B0000] text-[#8B0000]'
+              }
+            >
+              <i className="fas fa-chart-line mr-1"></i> Line Chart
+            </Button>
+            <Button
+              size="sm"
+              variant={chartType === 'area' ? 'default' : 'outline'}
+              onClick={() => setChartType('area')}
+              className={chartType === 'area' 
+                ? 'bg-gradient-to-r from-[#8B0000] to-[#B22222] text-white' 
+                : 'border-[#8B0000] text-[#8B0000]'
+              }
+            >
+              <i className="fas fa-chart-area mr-1"></i> Area Chart
+            </Button>
+          </div>
+        )}
+
         {error && (
-          <Alert className="mb-6 border-red-200 bg-red-50">
+          <Alert className="mb-6 border-red-300 bg-red-100/90 backdrop-blur-sm shadow-lg">
             <i className="fas fa-exclamation-circle text-red-600 mt-1"></i>
             <AlertDescription className="text-red-800">{error}</AlertDescription>
           </Alert>
@@ -376,29 +415,29 @@ function HistoryGraph({ userId = null, onNavigate }) {
 
         {/* Table View */}
         {viewMode === 'table' && (
-          <Card className="shadow-lg">
+          <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                 <i className="fas fa-table text-[#8B0000]"></i>
                 All Reports History
               </CardTitle>
-              <CardDescription>
-                Complete list of your CBC reports with all parameters
+              <CardDescription className="text-[#4e2a2a]">
+                Complete list of your CBC reports with all 14 parameters
               </CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <div className="text-center py-12">
                   <i className="fas fa-spinner fa-spin text-3xl text-[#8B0000] mb-4"></i>
-                  <p className="text-gray-600">Loading reports...</p>
+                  <p className="text-[#4e2a2a]">Loading reports...</p>
                 </div>
               ) : reports.length === 0 ? (
                 <div className="text-center py-12">
                   <i className="fas fa-inbox text-4xl text-gray-400 mb-4"></i>
-                  <p className="text-gray-600 mb-2">No reports found</p>
+                  <p className="text-[#4e2a2a] mb-2">No reports found</p>
                   <p className="text-sm text-gray-500 mb-4">Upload your first report to get started</p>
                   {onNavigate && (
-                    <Button onClick={() => onNavigate('upload')} className="bg-[#8B0000] hover:bg-[#B22222] text-white">
+                    <Button onClick={() => onNavigate('upload', { resetUploadState: true })} className="bg-gradient-to-r from-[#8B0000] to-[#B22222] text-white">
                       <i className="fas fa-upload mr-2"></i>
                       Upload Report
                     </Button>
@@ -408,17 +447,11 @@ function HistoryGraph({ userId = null, onNavigate }) {
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Date</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Hemoglobin</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">RBC</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">WBC</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Platelets</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Hematocrit</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">MCV</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">MCH</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">MCHC</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                      <tr className="bg-gradient-to-r from-[#FFE4E1] to-[#fff8f8]">
+                        <th className="px-3 py-3 text-left text-sm font-semibold text-[#2c1212]">Date</th>
+                        {parameters.map(param => (
+                          <th key={param.value} className="px-3 py-3 text-left text-sm font-semibold text-[#2c1212]">{param.label}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
@@ -426,51 +459,17 @@ function HistoryGraph({ userId = null, onNavigate }) {
                         const cbcData = typeof report.cbcData === 'string' 
                           ? JSON.parse(report.cbcData) 
                           : report.cbcData;
-                        const severity = report.analysis?.severity || 'normal';
-
-  return (
-                          <tr 
-                            key={report.id} 
-                            className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                              index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
-                            }`}
-                          >
-                            <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                        
+                        return (
+                          <tr key={report.id} className={`border-b border-gray-100 hover:bg-gradient-to-r hover:from-[#FFE4E1] hover:to-transparent transition-all duration-300 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                            <td className="px-3 py-3 text-sm text-gray-900 font-medium">
                               {formatDate(report.createdAt)}
                             </td>
-                            <td className={`px-4 py-3 text-sm ${getStatusColor(cbcData?.hemoglobin, 'hemoglobin')}`}>
-                              {cbcData?.hemoglobin || '—'}
-                            </td>
-                            <td className={`px-4 py-3 text-sm ${getStatusColor(cbcData?.rbc, 'rbc')}`}>
-                              {cbcData?.rbc || '—'}
-                            </td>
-                            <td className={`px-4 py-3 text-sm ${getStatusColor(cbcData?.wbc, 'wbc')}`}>
-                              {cbcData?.wbc || '—'}
-                            </td>
-                            <td className={`px-4 py-3 text-sm ${getStatusColor(cbcData?.platelets, 'platelets')}`}>
-                              {cbcData?.platelets || '—'}
-                            </td>
-                            <td className={`px-4 py-3 text-sm ${getStatusColor(cbcData?.hematocrit, 'hematocrit')}`}>
-                              {cbcData?.hematocrit || '—'}
-                            </td>
-                            <td className={`px-4 py-3 text-sm ${getStatusColor(cbcData?.mcv, 'mcv')}`}>
-                              {cbcData?.mcv || '—'}
-                            </td>
-                            <td className={`px-4 py-3 text-sm ${getStatusColor(cbcData?.mch, 'mch')}`}>
-                              {cbcData?.mch || '—'}
-                            </td>
-                            <td className={`px-4 py-3 text-sm ${getStatusColor(cbcData?.mchc, 'mchc')}`}>
-                              {cbcData?.mchc || '—'}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                severity === 'critical' ? 'bg-red-100 text-red-800' :
-                                severity === 'abnormal' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-green-100 text-green-800'
-                              }`}>
-                                {severity || 'Normal'}
-                              </span>
-                            </td>
+                            {parameters.map(param => (
+                              <td key={param.value} className={`px-3 py-3 text-sm ${getStatusColor(cbcData?.[param.value], param.value)}`}>
+                                {cbcData?.[param.value] || '—'}
+                              </td>
+                            ))}
                           </tr>
                         );
                       })}
@@ -486,83 +485,102 @@ function HistoryGraph({ userId = null, onNavigate }) {
         {viewMode === 'graph' && (
           <div className="space-y-6">
             {/* Parameter Selection */}
-            <Card className="shadow-lg">
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                   <i className="fas fa-sliders-h text-[#8B0000]"></i>
                   Select Parameters to Compare
                 </CardTitle>
-                <CardDescription>
-                  Select multiple parameters to compare their trends and identify correlations
+                <CardDescription className="text-[#4e2a2a]">
+                  Select up to 6 parameters to compare their trends. Use group buttons for quick selection.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {parameters.map(param => (
-                      <label
-                        key={param.value}
-                        className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                          selectedParameters.includes(param.value)
-                            ? 'bg-[#FFE4E1] border-[#8B0000] text-[#8B0000] font-semibold'
-                            : 'bg-white border-gray-300 text-gray-700 hover:border-[#8B0000] hover:text-[#8B0000]'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedParameters.includes(param.value)}
-                          onChange={() => handleParameterToggle(param.value)}
-                          className="mr-2 text-[#8B0000] focus:ring-[#8B0000] rounded"
-                        />
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
-                            style={{ backgroundColor: param.color }}
-                          ></div>
-                          <span>{param.label}</span>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                  {selectedParameters.length > 0 && (
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-sm text-blue-800">
-                        <i className="fas fa-info-circle mr-2"></i>
-                        Comparing <strong>{selectedParameters.length}</strong> parameter{selectedParameters.length > 1 ? 's' : ''}: {' '}
-                        {selectedParameters.map((param, idx) => (
-                          <span key={param}>
-                            <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: parameters.find(p => p.value === param)?.color }}></span>
-                            {parameters.find(p => p.value === param)?.label}
-                            {idx < selectedParameters.length - 1 ? ', ' : ''}
-                          </span>
-                        ))}
-                      </p>
-                    </div>
-                  )}
+                {/* Quick Select Buttons */}
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={handleSelectAll} className="border-[#8B0000] text-[#8B0000] hover:bg-white/80">
+                    <i className="fas fa-check-double mr-1"></i> All
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleClearAll} className="border-[#8B0000] text-[#8B0000] hover:bg-white/80">
+                    <i className="fas fa-times mr-1"></i> Clear
+                  </Button>
+                  {Object.keys(groupedParameters).map(group => (
+                    <Button 
+                      key={group} 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => handleSelectGroup(group)}
+                      className="border-[#8B0000] text-[#8B0000] hover:bg-white/80"
+                      style={{ borderLeftColor: groupColors[group], borderLeftWidth: '3px' }}
+                    >
+                      <i className="fas fa-layer-group mr-1"></i> {group}
+                    </Button>
+                  ))}
                 </div>
+
+                {/* Parameter Checkboxes Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                  {parameters.map(param => (
+                    <label
+                      key={param.value}
+                      className={`flex items-center p-2 rounded-lg border-2 cursor-pointer transition-all duration-300 ${
+                        selectedParameters.includes(param.value)
+                          ? 'bg-gradient-to-r from-[#FFE4E1] to-[#fff8f8] border-[#8B0000] text-[#8B0000] font-semibold shadow-md'
+                          : 'bg-white border-gray-200 text-gray-700 hover:border-[#8B0000] hover:shadow-md'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedParameters.includes(param.value)}
+                        onChange={() => handleParameterToggle(param.value)}
+                        className="mr-2 text-[#8B0000] focus:ring-[#8B0000] rounded"
+                      />
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: param.color }}></div>
+                        <span className="text-xs">{param.label}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                
+                {selectedParameters.length > 0 && (
+                  <div className="mt-3 p-3 bg-blue-50/80 backdrop-blur-sm rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <i className="fas fa-chart-line mr-2"></i>
+                      Showing <strong>{selectedParameters.length}</strong> parameter{selectedParameters.length > 1 ? 's' : ''}: {' '}
+                      {selectedParameters.map((param, idx) => (
+                        <span key={param}>
+                          <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: parameters.find(p => p.value === param)?.color }}></span>
+                          {parameters.find(p => p.value === param)?.label}
+                          {idx < selectedParameters.length - 1 ? ', ' : ''}
+                        </span>
+                      ))}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             {/* Graph */}
             {selectedParameters.length > 0 && (
-              <Card className="shadow-lg">
+              <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                     <i className="fas fa-chart-line text-[#8B0000]"></i>
-                    Trend Analysis: {selectedParameters.map(p => parameters.find(param => param.value === p)?.label).join(' vs ')}
+                    Trend Analysis
                   </CardTitle>
-                  <CardDescription>
-                    Comparing {selectedParameters.length} parameter{selectedParameters.length > 1 ? 's' : ''} to analyze trends and correlations
+                  <CardDescription className="text-[#4e2a2a]">
+                    {chartType === 'line' ? 'Line chart showing trends over time' : 'Area chart showing cumulative trends'}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {chartData.length === 0 ? (
                     <div className="text-center py-12">
                       <i className="fas fa-chart-line text-4xl text-gray-400 mb-4"></i>
-                      <p className="text-gray-600 mb-2">No trend data available</p>
+                      <p className="text-[#4e2a2a] mb-2">No trend data available</p>
                       <p className="text-sm text-gray-500 mb-4">Upload more reports to see trends</p>
                       {onNavigate && (
-                        <Button onClick={() => onNavigate('upload')} className="bg-[#8B0000] hover:bg-[#B22222] text-white">
+                        <Button onClick={() => onNavigate('upload', { resetUploadState: true })} className="bg-gradient-to-r from-[#8B0000] to-[#B22222] text-white">
                           <i className="fas fa-upload mr-2"></i>
                           Upload Report
                         </Button>
@@ -570,174 +588,186 @@ function HistoryGraph({ userId = null, onNavigate }) {
                     </div>
                   ) : (
                     <>
-                      <div className="h-[400px] mb-6">
+                      <div className="h-[450px] mb-6">
                         <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                            <XAxis 
-                              dataKey="date" 
-                              stroke="#666"
-                              style={{ fontSize: '12px' }}
-                            />
-                            <YAxis 
-                              stroke="#666"
-                              style={{ fontSize: '12px' }}
-                              label={{ 
-                                value: 'Values', 
-                                angle: -90, 
-                                position: 'insideLeft' 
-                              }}
-                            />
-                            <Tooltip 
-                              contentStyle={{
-                                backgroundColor: '#fff',
-                                border: '1px solid #E5E7EB',
-                                borderRadius: '8px',
-                                padding: '10px'
-                              }}
-                            />
-                            <Legend />
-                            {selectedParameters.map(paramValue => {
-                              const param = parameters.find(p => p.value === paramValue);
-                              return (
-                                <Line
-                                  key={paramValue}
-                                  type="monotone"
-                                  dataKey={paramValue}
-                                  stroke={param?.color || '#8B0000'}
-                                  strokeWidth={2}
-                                  dot={{ r: 4, fill: param?.color || '#8B0000' }}
-                                  activeDot={{ r: 6 }}
-                                  name={`${param?.label} (${param?.unit})`}
-                                />
-                              );
-                            })}
-                          </LineChart>
+                          {chartType === 'line' ? (
+                            <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                              <XAxis 
+                                dataKey="date" 
+                                stroke="#666"
+                                tick={{ fontSize: 11 }}
+                                interval={Math.floor(chartData.length / 8)}
+                              />
+                              <YAxis 
+                                stroke="#666"
+                                tick={{ fontSize: 11 }}
+                                width={50}
+                              />
+                              <Tooltip 
+                                contentStyle={{
+                                  backgroundColor: 'white',
+                                  border: '1px solid #E5E7EB',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                }}
+                              />
+                              <Legend 
+                                wrapperStyle={{ fontSize: '12px' }}
+                                verticalAlign="top"
+                                height={36}
+                              />
+                              {selectedParameters.map(paramValue => {
+                                const param = parameters.find(p => p.value === paramValue);
+                                return (
+                                  <Line
+                                    key={paramValue}
+                                    type="monotone"
+                                    dataKey={paramValue}
+                                    stroke={param?.color || '#8B0000'}
+                                    strokeWidth={2.5}
+                                    dot={{ r: 4, fill: param?.color || '#8B0000', strokeWidth: 2 }}
+                                    activeDot={{ r: 6, stroke: param?.color, strokeWidth: 2 }}
+                                    name={`${param?.label} (${param?.unit})`}
+                                  />
+                                );
+                              })}
+                            </LineChart>
+                          ) : (
+                            <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                              <XAxis 
+                                dataKey="date" 
+                                stroke="#666"
+                                tick={{ fontSize: 11 }}
+                                interval={Math.floor(chartData.length / 8)}
+                              />
+                              <YAxis 
+                                stroke="#666"
+                                tick={{ fontSize: 11 }}
+                                width={50}
+                              />
+                              <Tooltip 
+                                contentStyle={{
+                                  backgroundColor: 'white',
+                                  border: '1px solid #E5E7EB',
+                                  borderRadius: '8px',
+                                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                }}
+                              />
+                              <Legend 
+                                wrapperStyle={{ fontSize: '12px' }}
+                                verticalAlign="top"
+                                height={36}
+                              />
+                              {selectedParameters.map(paramValue => {
+                                const param = parameters.find(p => p.value === paramValue);
+                                return (
+                                  <Area
+                                    key={paramValue}
+                                    type="monotone"
+                                    dataKey={paramValue}
+                                    stroke={param?.color || '#8B0000'}
+                                    fill={param?.color || '#8B0000'}
+                                    fillOpacity={0.2}
+                                    strokeWidth={2}
+                                    name={`${param?.label} (${param?.unit})`}
+                                  />
+                                );
+                              })}
+                            </ComposedChart>
+                          )}
                         </ResponsiveContainer>
                       </div>
-          
-          {/* Trend Interpretation */}
-          {trendInfo && (
-                        <Alert className={`${trendInfo.color} border`}>
-                          <i className={`fas fa-${trendInfo.type === 'improving' ? 'arrow-up' : trendInfo.type === 'declining' ? 'arrow-down' : 'minus'} mt-1`}></i>
-                          <AlertDescription>
-                            <strong>Overall Trend:</strong> {trendInfo.message}
-                          </AlertDescription>
-                        </Alert>
-                      )}
 
-                      {/* Simple Comparison Summary */}
-                      {selectedParameters.length > 0 && (
-                        <div className="mt-6">
-                          <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
-                            <i className="fas fa-list-check text-[#8B0000]"></i>
-                            Comparison Summary
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {selectedParameters.map(paramValue => {
-                              const analysis = getParameterAnalysis(paramValue);
-                              if (!analysis) return null;
-                              
-                              const param = parameters.find(p => p.value === paramValue);
-                              
-                              // Determine icon and color based on combined status
-                              let trendIcon, trendColor;
-                              if (analysis.status === 'low') {
-                                trendIcon = analysis.trend === 'decreasing' ? 'arrow-down' : 
-                                           analysis.trend === 'increasing' ? 'arrow-up' : 'minus';
-                                trendColor = analysis.trend === 'decreasing' ? 'text-red-600' : 
-                                            analysis.trend === 'increasing' ? 'text-green-600' : 'text-blue-600';
-                              } else if (analysis.status === 'high') {
-                                trendIcon = analysis.trend === 'increasing' ? 'arrow-up' : 
-                                           analysis.trend === 'decreasing' ? 'arrow-down' : 'minus';
-                                trendColor = analysis.trend === 'increasing' ? 'text-red-600' : 
-                                            analysis.trend === 'decreasing' ? 'text-green-600' : 'text-yellow-600';
-                              } else {
-                                trendIcon = analysis.trend === 'increasing' ? 'arrow-up' : 
-                                           analysis.trend === 'decreasing' ? 'arrow-down' : 'minus';
-                                trendColor = analysis.trend === 'increasing' ? 'text-green-600' : 
-                                            analysis.trend === 'decreasing' ? 'text-yellow-600' : 'text-blue-600';
-                              }
-                              
-                              return (
-                                <div 
-                                  key={paramValue}
-                                  className="p-4 bg-white border-2 rounded-lg"
-                                  style={{ borderLeftColor: analysis.color, borderLeftWidth: '4px' }}
-                                >
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: analysis.color }}></div>
-                                    <span className="font-semibold text-gray-900">{analysis.param}</span>
+                      {/* Parameter Summaries */}
+                      <div className="mt-6">
+                        <h4 className="text-lg font-semibold text-[#2c1212] flex items-center gap-2 mb-4">
+                          <i className="fas fa-list-check text-[#8B0000]"></i>
+                          Parameter Summary
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {selectedParameters.map(paramValue => {
+                            const analysis = getParameterAnalysis(paramValue);
+                            if (!analysis) return null;
+                            
+                            let trendIcon, trendColor;
+                            if (analysis.status === 'low') {
+                              trendIcon = analysis.trend === 'decreasing' ? 'arrow-down' : 
+                                         analysis.trend === 'increasing' ? 'arrow-up' : 'minus';
+                              trendColor = analysis.trend === 'decreasing' ? 'text-red-600' : 
+                                          analysis.trend === 'increasing' ? 'text-green-600' : 'text-blue-600';
+                            } else if (analysis.status === 'high') {
+                              trendIcon = analysis.trend === 'increasing' ? 'arrow-up' : 
+                                         analysis.trend === 'decreasing' ? 'arrow-down' : 'minus';
+                              trendColor = analysis.trend === 'increasing' ? 'text-red-600' : 
+                                          analysis.trend === 'decreasing' ? 'text-green-600' : 'text-yellow-600';
+                            } else {
+                              trendIcon = analysis.trend === 'increasing' ? 'arrow-up' : 
+                                         analysis.trend === 'decreasing' ? 'arrow-down' : 'minus';
+                              trendColor = analysis.trend === 'increasing' ? 'text-green-600' : 
+                                          analysis.trend === 'decreasing' ? 'text-yellow-600' : 'text-blue-600';
+                            }
+                            
+                            return (
+                              <div 
+                                key={paramValue}
+                                className="p-4 bg-white rounded-xl border-2 hover:shadow-lg transition-all duration-300 hover:scale-105"
+                                style={{ borderLeftColor: analysis.color, borderLeftWidth: '4px' }}
+                              >
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: analysis.color }}></div>
+                                  <span className="font-semibold text-gray-900">{analysis.param}</span>
+                                </div>
+                                <div className="space-y-1 text-sm">
+                                  <div className="flex items-center gap-2">
+                                    <i className={`fas fa-${trendIcon} ${trendColor}`}></i>
+                                    <span className="text-gray-700">
+                                      <strong className={trendColor}>{analysis.combinedDescription}</strong>
+                                    </span>
                                   </div>
-                                  <div className="space-y-1 text-sm">
-                                    <div className="flex items-center gap-2">
-                                      <i className={`fas fa-${trendIcon} ${trendColor}`}></i>
-                                      <span className="text-gray-700">
-                                        <strong className={trendColor}>{analysis.combinedDescription}</strong>
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                        analysis.status === 'normal' ? 'bg-green-100 text-green-800' :
-                                        analysis.status === 'low' ? 'bg-blue-100 text-blue-800' :
-                                        'bg-red-100 text-red-800'
-                                      }`}>
-                                        {analysis.status.charAt(0).toUpperCase() + analysis.status.slice(1)}
-                                      </span>
-                                      <span className="text-gray-600 text-xs">
-                                        ({analysis.lastValue} {analysis.unit})
-                                      </span>
-                                    </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                      analysis.status === 'normal' ? 'bg-green-100 text-green-800' :
+                                      analysis.status === 'low' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-red-100 text-red-800'
+                                    }`}>
+                                      {analysis.status.charAt(0).toUpperCase() + analysis.status.slice(1)}
+                                    </span>
+                                    <span className="text-gray-600 text-xs block">
+                                      Latest: {analysis.lastValue} {analysis.unit}
+                                      <span className="text-gray-500"> · Avg: {analysis.avgValue}</span>
+                                    </span>
+                                    <span className="text-gray-500 text-xs block mt-1">
+                                      {analysis.firstToLatest}
+                                    </span>
                                   </div>
                                 </div>
-                              );
-                            })}
-                          </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      )}
-
-                      {/* Comparison Insights */}
-                      {getComparisonInsights() && getComparisonInsights().length > 0 && (
-                        <div className="mt-6 space-y-3">
-                          <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                            <i className="fas fa-lightbulb text-[#8B0000]"></i>
-                            What This Comparison Tells You
-                          </h4>
-                          {getComparisonInsights().map((insight, idx) => (
-                            <Alert 
-                              key={idx}
-                              className={`border ${
-                                insight.type === 'correlation' ? 'bg-blue-50 border-blue-200 text-blue-800' :
-                                insight.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800' :
-                                'bg-green-50 border-green-200 text-green-800'
-                              }`}
-                            >
-                              <i className={`fas ${insight.icon} mt-1`}></i>
-                              <AlertDescription>
-                                <strong>{insight.title}:</strong> {insight.description}
-                              </AlertDescription>
-                            </Alert>
-                          ))}
-                        </div>
-                      )}
+                      </div>
 
                       {/* Stats */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                          <div className="text-sm text-gray-600 mb-1">Data Points</div>
+                        <div className="p-4 bg-gradient-to-r from-[#FFF0EE] to-[#FFE4E1] rounded-xl">
+                          <div className="text-sm text-[#4e2a2a] mb-1">Total Data Points</div>
                           <div className="text-2xl font-bold text-[#8B0000]">{chartData.length}</div>
                         </div>
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                          <div className="text-sm text-gray-600 mb-1">Selected Parameters</div>
-                          <div className="text-lg font-semibold text-gray-800">
+                        <div className="p-4 bg-gradient-to-r from-[#FFF0EE] to-[#FFE4E1] rounded-xl">
+                          <div className="text-sm text-[#4e2a2a] mb-1">Selected Parameters</div>
+                          <div className="text-lg font-semibold text-[#8B0000]">
                             {selectedParameters.length} parameter{selectedParameters.length > 1 ? 's' : ''}
                           </div>
                         </div>
-                        <div className="p-4 bg-gray-50 rounded-lg">
-                          <div className="text-sm text-gray-600 mb-1">First Record</div>
-                          <div className="text-lg font-semibold text-gray-800">{chartData[0]?.date}</div>
-          </div>
-          </div>
+                        <div className="p-4 bg-gradient-to-r from-[#FFF0EE] to-[#FFE4E1] rounded-xl">
+                          <div className="text-sm text-[#4e2a2a] mb-1">Date Range</div>
+                          <div className="text-sm font-semibold text-[#8B0000]">
+                            {chartData[0]?.date} - {chartData[chartData.length - 1]?.date}
+                          </div>
+                        </div>
+                      </div>
                     </>
                   )}
                 </CardContent>
@@ -745,7 +775,7 @@ function HistoryGraph({ userId = null, onNavigate }) {
             )}
           </div>
         )}
-        </div>
+      </div>
     </div>
   );
 }

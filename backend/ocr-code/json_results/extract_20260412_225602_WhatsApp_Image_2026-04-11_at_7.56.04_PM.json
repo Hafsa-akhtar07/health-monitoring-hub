@@ -1,0 +1,702 @@
+{
+  "success": true,
+  "filename": "WhatsApp_Image_2026-04-11_at_7.56.04_PM.jpeg",
+  "processed_at": "2026-04-12T22:56:02.159336",
+  "ocr_pass_used": "Original",
+  "ocr_compare": {
+    "original": {
+      "score_lines": 108,
+      "score_chars": 1038,
+      "cbc_row_count": 14,
+      "ocr_seconds": 82.952654,
+      "total_detections": 108
+    },
+    "preprocessed": null,
+    "chosen": "Original",
+    "reason": "preprocessed_unavailable",
+    "preprocessed_error": null
+  },
+  "total_detections": 108,
+  "all_text": "Working Days Monday To Saturday 8:00 am to 9:30 pm BIO Sunday: 8:00 am to 2:00 pm LEB RAD PATIENT NAME: TUSHAR KANOUJIYA SEX/ AGE : MALE / 23 LAB NO :1 REG DATE : 18-4-2023/ 20:58 REF. BY Dr. : SELF SAMPLE DATE : 18-4-2023 / 20:5 SAMPLE COLL. AT : LAB REPORT DATE : 18-4-2023 / 21:41 COMPLETE BLOOD COUNT TEST RESULT UNITS NORMAL VALUES Haemoglobin 14 g% Male :14-16 g% Female:12-14 g% RBC Count 5 million/cu.mm 4.0 - 6.0 million / cu.mm PCV 40 % 35 - 45 % RBC INDICES MCV 80 fl 80 - 99 fl MCH 30 28 - 32 pg pg MCHC 34 % 30 - 34 % RDW 10 fl 9 - 17 fl TOTAL WBC COUNT 5000 Total WBC Count / cumm 4000 - 11000 / cu.mm 50 Neutrophils % 40 - 75 % 40 Lymphocytes % 20 - 45 % 5 Eosinophils % 00 - 06 % 4 Monocytes % 00 - 10 % 1 Basophils % 00 - 01% PLATELETS 160000 Platelet Count /cumm 150000 - 450000 / cu.mm Marked Redused On Smear Platelet On Smear PERIPHERAL BLOOD SMEAR Anisocytosis(+) RBC Morphology Neutophilic Leucocytosis WBCs on PS 50 RDWSD fl 37 - 54 fl 15 RDWCV % 11 - 16 % MPV 12 fl 9 - 13 fl P-LCR 13 % 13 - 43 % est done on MEK-6420K fully automated cel couter. End of Report oid Indicates Abnormal Values Dr. Oliver Smith irish thakur",
+  "ocr_result": [
+    {
+      "text": "Working Days",
+      "index": 0
+    },
+    {
+      "text": "Monday To Saturday",
+      "index": 1
+    },
+    {
+      "text": "8:00 am to 9:30 pm",
+      "index": 2
+    },
+    {
+      "text": "BIO",
+      "index": 3
+    },
+    {
+      "text": "RAD",
+      "index": 4
+    },
+    {
+      "text": "Sunday: 8:00 am to 2:00 pm",
+      "index": 5
+    },
+    {
+      "text": "LEB",
+      "index": 6
+    },
+    {
+      "text": "PATIENT NAME: TUSHAR KANOUJIYA",
+      "index": 7
+    },
+    {
+      "text": "LAB NO :1",
+      "index": 8
+    },
+    {
+      "text": "SEX/ AGE : MALE / 23",
+      "index": 9
+    },
+    {
+      "text": "REF. BY Dr. : SELF",
+      "index": 10
+    },
+    {
+      "text": "REG DATE : 18-4-2023/ 20:58",
+      "index": 11
+    },
+    {
+      "text": "SAMPLE COLL. AT : LAB",
+      "index": 12
+    },
+    {
+      "text": "SAMPLE DATE : 18-4-2023 / 20:5",
+      "index": 13
+    },
+    {
+      "text": "REPORT DATE : 18-4-2023 / 21:41",
+      "index": 14
+    },
+    {
+      "text": "COMPLETE BLOOD COUNT",
+      "index": 15
+    },
+    {
+      "text": "TEST",
+      "index": 16
+    },
+    {
+      "text": "RESULT",
+      "index": 17
+    },
+    {
+      "text": "UNITS",
+      "index": 18
+    },
+    {
+      "text": "Haemoglobin",
+      "index": 19
+    },
+    {
+      "text": "NORMAL VALUES",
+      "index": 20
+    },
+    {
+      "text": "14",
+      "index": 21
+    },
+    {
+      "text": "g%",
+      "index": 22
+    },
+    {
+      "text": "Male :14-16 g%",
+      "index": 23
+    },
+    {
+      "text": "Female:12-14 g%",
+      "index": 24
+    },
+    {
+      "text": "RBC Count",
+      "index": 25
+    },
+    {
+      "text": "5",
+      "index": 26
+    },
+    {
+      "text": "million/cu.mm",
+      "index": 27
+    },
+    {
+      "text": "PCV",
+      "index": 28
+    },
+    {
+      "text": "4.0 - 6.0 million / cu.mm",
+      "index": 29
+    },
+    {
+      "text": "40",
+      "index": 30
+    },
+    {
+      "text": "%",
+      "index": 31
+    },
+    {
+      "text": "35 - 45 %",
+      "index": 32
+    },
+    {
+      "text": "RBC INDICES",
+      "index": 33
+    },
+    {
+      "text": "MCV",
+      "index": 34
+    },
+    {
+      "text": "80",
+      "index": 35
+    },
+    {
+      "text": "fl",
+      "index": 36
+    },
+    {
+      "text": "80 - 99 fl",
+      "index": 37
+    },
+    {
+      "text": "MCH",
+      "index": 38
+    },
+    {
+      "text": "30",
+      "index": 39
+    },
+    {
+      "text": "pg",
+      "index": 40
+    },
+    {
+      "text": "28 - 32 pg",
+      "index": 41
+    },
+    {
+      "text": "MCHC",
+      "index": 42
+    },
+    {
+      "text": "34",
+      "index": 43
+    },
+    {
+      "text": "%",
+      "index": 44
+    },
+    {
+      "text": "30 - 34 %",
+      "index": 45
+    },
+    {
+      "text": "RDW",
+      "index": 46
+    },
+    {
+      "text": "10",
+      "index": 47
+    },
+    {
+      "text": "fl",
+      "index": 48
+    },
+    {
+      "text": "9 - 17 fl",
+      "index": 49
+    },
+    {
+      "text": "TOTAL WBC COUNT",
+      "index": 50
+    },
+    {
+      "text": "Total WBC Count",
+      "index": 51
+    },
+    {
+      "text": "5000",
+      "index": 52
+    },
+    {
+      "text": "/ cumm",
+      "index": 53
+    },
+    {
+      "text": "4000 - 11000 / cu.mm",
+      "index": 54
+    },
+    {
+      "text": "Neutrophils",
+      "index": 55
+    },
+    {
+      "text": "50",
+      "index": 56
+    },
+    {
+      "text": "%",
+      "index": 57
+    },
+    {
+      "text": "40 - 75 %",
+      "index": 58
+    },
+    {
+      "text": "Lymphocytes",
+      "index": 59
+    },
+    {
+      "text": "40",
+      "index": 60
+    },
+    {
+      "text": "%",
+      "index": 61
+    },
+    {
+      "text": "20 - 45 %",
+      "index": 62
+    },
+    {
+      "text": "Eosinophils",
+      "index": 63
+    },
+    {
+      "text": "5",
+      "index": 64
+    },
+    {
+      "text": "%",
+      "index": 65
+    },
+    {
+      "text": "00 - 06 %",
+      "index": 66
+    },
+    {
+      "text": "Monocytes",
+      "index": 67
+    },
+    {
+      "text": "4",
+      "index": 68
+    },
+    {
+      "text": "%",
+      "index": 69
+    },
+    {
+      "text": "00 - 10 %",
+      "index": 70
+    },
+    {
+      "text": "Basophils",
+      "index": 71
+    },
+    {
+      "text": "1",
+      "index": 72
+    },
+    {
+      "text": "%",
+      "index": 73
+    },
+    {
+      "text": "00 - 01%",
+      "index": 74
+    },
+    {
+      "text": "PLATELETS",
+      "index": 75
+    },
+    {
+      "text": "Platelet Count",
+      "index": 76
+    },
+    {
+      "text": "160000",
+      "index": 77
+    },
+    {
+      "text": "/cumm",
+      "index": 78
+    },
+    {
+      "text": "150000 - 450000 / cu.mm",
+      "index": 79
+    },
+    {
+      "text": "Platelet On Smear",
+      "index": 80
+    },
+    {
+      "text": "Marked Redused On Smear",
+      "index": 81
+    },
+    {
+      "text": "PERIPHERAL BLOOD SMEAR",
+      "index": 82
+    },
+    {
+      "text": "RBC Morphology",
+      "index": 83
+    },
+    {
+      "text": "Anisocytosis(+)",
+      "index": 84
+    },
+    {
+      "text": "WBCs on PS",
+      "index": 85
+    },
+    {
+      "text": "Neutophilic Leucocytosis",
+      "index": 86
+    },
+    {
+      "text": "RDWSD",
+      "index": 87
+    },
+    {
+      "text": "50",
+      "index": 88
+    },
+    {
+      "text": "fl",
+      "index": 89
+    },
+    {
+      "text": "37 - 54 fl",
+      "index": 90
+    },
+    {
+      "text": "RDWCV",
+      "index": 91
+    },
+    {
+      "text": "15",
+      "index": 92
+    },
+    {
+      "text": "%",
+      "index": 93
+    },
+    {
+      "text": "11 - 16 %",
+      "index": 94
+    },
+    {
+      "text": "MPV",
+      "index": 95
+    },
+    {
+      "text": "12",
+      "index": 96
+    },
+    {
+      "text": "fl",
+      "index": 97
+    },
+    {
+      "text": "9 - 13 fl",
+      "index": 98
+    },
+    {
+      "text": "P-LCR",
+      "index": 99
+    },
+    {
+      "text": "13",
+      "index": 100
+    },
+    {
+      "text": "%",
+      "index": 101
+    },
+    {
+      "text": "13 - 43 %",
+      "index": 102
+    },
+    {
+      "text": "est done on MEK-6420K fully automated cel couter.",
+      "index": 103
+    },
+    {
+      "text": "End of Report",
+      "index": 104
+    },
+    {
+      "text": "oid Indicates Abnormal Values",
+      "index": 105
+    },
+    {
+      "text": "irish thakur",
+      "index": 106
+    },
+    {
+      "text": "Dr. Oliver Smith",
+      "index": 107
+    }
+  ],
+  "cbc_fourteen": {
+    "hemoglobin": {
+      "found": true,
+      "observed_value": "14.0",
+      "unit": "g/dL",
+      "test_name": "Hemoglobin"
+    },
+    "hematocrit": {
+      "found": true,
+      "observed_value": "40.0",
+      "unit": "%",
+      "test_name": "Hematocrit"
+    },
+    "rbc": {
+      "found": true,
+      "observed_value": "5.0",
+      "unit": "",
+      "test_name": "RBC count"
+    },
+    "wbc": {
+      "found": true,
+      "observed_value": "5000.0",
+      "unit": "",
+      "test_name": "WBC count"
+    },
+    "platelets": {
+      "found": true,
+      "observed_value": "160000.0",
+      "unit": "",
+      "test_name": "Platelet count"
+    },
+    "mcv": {
+      "found": true,
+      "observed_value": "80.0",
+      "unit": "fL",
+      "test_name": "MCV"
+    },
+    "mch": {
+      "found": true,
+      "observed_value": "30.0",
+      "unit": "pg",
+      "test_name": "MCH"
+    },
+    "mchc": {
+      "found": true,
+      "observed_value": "34.0",
+      "unit": "g/dL",
+      "test_name": "MCHC"
+    },
+    "rdw": {
+      "found": true,
+      "observed_value": "10.0",
+      "unit": "%",
+      "test_name": "RDW"
+    },
+    "neutrophils": {
+      "found": true,
+      "observed_value": "50.0",
+      "unit": "%",
+      "test_name": "Neutrophils"
+    },
+    "lymphocytes": {
+      "found": true,
+      "observed_value": "40.0",
+      "unit": "%",
+      "test_name": "Lymphocytes"
+    },
+    "monocytes": {
+      "found": true,
+      "observed_value": "4.0",
+      "unit": "%",
+      "test_name": "Monocytes"
+    },
+    "eosinophils": {
+      "found": true,
+      "observed_value": "5.0",
+      "unit": "%",
+      "test_name": "Eosinophils"
+    },
+    "basophils": {
+      "found": true,
+      "observed_value": "1.0",
+      "unit": "%",
+      "test_name": "Basophils"
+    }
+  },
+  "structured_data": {
+    "patient_info": {},
+    "laboratory_info": {},
+    "haematology_report": [
+      {
+        "test_name": "Hemoglobin",
+        "observed_value": "14.0",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "Hematocrit",
+        "observed_value": "40.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "RBC count",
+        "observed_value": "5.0",
+        "unit": ""
+      },
+      {
+        "test_name": "WBC count",
+        "observed_value": "5000.0",
+        "unit": ""
+      },
+      {
+        "test_name": "Platelet count",
+        "observed_value": "160000.0",
+        "unit": ""
+      },
+      {
+        "test_name": "MCV",
+        "observed_value": "80.0",
+        "unit": "fL"
+      },
+      {
+        "test_name": "MCH",
+        "observed_value": "30.0",
+        "unit": "pg"
+      },
+      {
+        "test_name": "MCHC",
+        "observed_value": "34.0",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "RDW",
+        "observed_value": "10.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Neutrophils",
+        "observed_value": "50.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Lymphocytes",
+        "observed_value": "40.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Monocytes",
+        "observed_value": "4.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Eosinophils",
+        "observed_value": "5.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Basophils",
+        "observed_value": "1.0",
+        "unit": "%"
+      }
+    ],
+    "blood_indices": [],
+    "morphology": {},
+    "footer_info": {},
+    "other_fields": {}
+  },
+  "structured_data_original": {
+    "patient_info": {},
+    "laboratory_info": {},
+    "haematology_report": [
+      {
+        "test_name": "Hemoglobin",
+        "observed_value": "14.0",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "Hematocrit",
+        "observed_value": "40.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "RBC count",
+        "observed_value": "5.0",
+        "unit": ""
+      },
+      {
+        "test_name": "WBC count",
+        "observed_value": "5000.0",
+        "unit": ""
+      },
+      {
+        "test_name": "Platelet count",
+        "observed_value": "160000.0",
+        "unit": ""
+      },
+      {
+        "test_name": "MCV",
+        "observed_value": "80.0",
+        "unit": "fL"
+      },
+      {
+        "test_name": "MCH",
+        "observed_value": "30.0",
+        "unit": "pg"
+      },
+      {
+        "test_name": "MCHC",
+        "observed_value": "34.0",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "RDW",
+        "observed_value": "10.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Neutrophils",
+        "observed_value": "50.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Lymphocytes",
+        "observed_value": "40.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Monocytes",
+        "observed_value": "4.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Eosinophils",
+        "observed_value": "5.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Basophils",
+        "observed_value": "1.0",
+        "unit": "%"
+      }
+    ],
+    "blood_indices": [],
+    "morphology": {},
+    "footer_info": {},
+    "other_fields": {}
+  },
+  "structured_data_preprocessed": null
+}

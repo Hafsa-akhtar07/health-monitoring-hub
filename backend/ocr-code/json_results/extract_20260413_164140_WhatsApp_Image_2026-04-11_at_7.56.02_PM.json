@@ -1,0 +1,902 @@
+{
+  "success": true,
+  "filename": "WhatsApp_Image_2026-04-11_at_7.56.02_PM.jpeg",
+  "processed_at": "2026-04-13T16:41:40.645164",
+  "ocr_pass_used": "Original",
+  "ocr_compare": {
+    "original": {
+      "score_lines": 158,
+      "score_chars": 2155,
+      "cbc_row_count": 14,
+      "ocr_seconds": 115.548112,
+      "total_detections": 158
+    },
+    "preprocessed": null,
+    "chosen": "Original",
+    "reason": "preprocessed_unavailable",
+    "preprocessed_error": null
+  },
+  "total_detections": 158,
+  "all_text": "PROCESSED AT : Thyrocare Thyrocare Seshans Complex, No.140, Tests you can trust Anna Salai, Saidapet, Chennai - 600 015 ATT MC-5457 wellness@thyrocare.com Thyrocare Technologies Limited, D-37/3, TTC MIDC, Turbhe, Navi Mumbai - 400703  98706 66333 9 out of 10 Doctors Trust that Thyrocare Reports are Accurate & Reliable HOME COLLECTION : NAME : xxxx XXXxxxXxXxxXXXX REF. BY : SELF : HEMOGRAM TEST ASKED VALUE Bio. Ref. Interval. UNITS TEST NAME 7.85 4.0 - 10.0 TOTAL LEUCOCYTES COUNT (WBC) X 10 ³3 / μL 57 40-80 NEUTROPHILS % 34 20-40 LYMPHOCYTE % 3.3 2-10 % MONOCYTES 4.7 1-6 % EOSINOPHILS 0.9 0-2 BASOPHILS % 0.1 0.0-0.4 IMMATURE GRANULOCYTE PERCENTAGE(IG%) % 2.0-7.0 4.47 NEUTROPHILS - ABSOLUTE COUNT X 10³3 / μL LYMPHOCYTES - ABSOLUTE COUNT 2.67 1.0-3.0 X 10³ / μL MONOCYTES - ABSOLUTE COUNT 0.2 - 1.0 0.26 X 10 ³3 / μL BASOPHILS - ABSOLUTE COUNT 0.02 - 0.1 0.07 X 10³ / μL 0.02 - 0.5 EOSINOPHILS - ABSOLUTE COUNT 0.37 X 10³ / μL 0.0-0.3 IMMATURE GRANULOCYTES(IG) 0.01 X 10³ / μL TOTAL RBC 4.62 3.8-4.8 X 10^6/μL 0.0-0.5 NUCLEATED RED BLOOD CELLS 0.01 X 10³3 / μL 0.0-5.0 NUCLEATED RED BLOOD CELLS % 0.01 % 12.0-15.0 12.9 HEMOGLOBIN g/dL 36.0-46.0 39.4 HEMATOCRIT(PCV) % MEAN CORPUSCULAR VOLUME(MCV) 83.0-101.0 85.3 fL 27.0-32.0 MEAN CORPUSCULAR HEMOGLOBIN(MCH) 27.9 pq MEAN CORP.HEMO.CONC(MCHC) 31.5-34.5 32.7 g/dL 39.0-46.0 RED CELL DISTRIBUTION WIDTH - SD(RDW-SD) 40.2 fL RED CELL DISTRIBUTION WIDTH (RDW-CV) 11.6-14.0 13 % PLATELET DISTRIBUTION WIDTH(PDW) 10.2 9.6-15.2 fL MEAN PLATELET VOLUME(MPV) 6.5-12 10 fL PLATELET COUNT 150-410 254 X 10³3 / μL PLATELET TO LARGE CELL RATIO(PLCR) 23.7 19.7-42.4 % PLATELETCRIT(PCT) 0.19-0.39 0.25 % Remarks: Alert!! Predominantly normocytic normochromic with ovalocytes. Platelets:Appear adequate in smear. Please Correlate with clinical conditions. Method : Fully automated bidirectional analyser (6 Part Differential SYSMEX XN-1000) (This device performs hematology analyses according to the Hydrodynamic Focussing (DC method), Flow Cytometry Method (using a semiconductor laser), and SLS- hemoglobin method) / - End of report- Sample Collected on (SCT) : 13 Nov 2023 08:27 Sample Received on (SRT) : 13 Nov 2023 13:40 Report Released on (RRT) : 13 Nov 2023 15:41 Sample Type EDTA Labcode : 1311066137/PP004 Dr Anusha B, MD (Path) Barcode : BK080052 Page : 1 of 2",
+  "ocr_result": [
+    {
+      "text": "PROCESSED AT :",
+      "index": 0
+    },
+    {
+      "text": "Thyrocare",
+      "index": 1
+    },
+    {
+      "text": "Thyrocare",
+      "index": 2
+    },
+    {
+      "text": "Seshans Complex, No.140,",
+      "index": 3
+    },
+    {
+      "text": "Anna Salai, Saidapet,",
+      "index": 4
+    },
+    {
+      "text": "Tests you can trust",
+      "index": 5
+    },
+    {
+      "text": "Chennai - 600 015",
+      "index": 6
+    },
+    {
+      "text": "ATT",
+      "index": 7
+    },
+    {
+      "text": "MC-5457",
+      "index": 8
+    },
+    {
+      "text": "Thyrocare Technologies Limited, D-37/3, TTC MIDC, Turbhe, Navi Mumbai - 400703  98706 66333",
+      "index": 9
+    },
+    {
+      "text": "wellness@thyrocare.com",
+      "index": 10
+    },
+    {
+      "text": "9 out of 10 Doctors Trust that Thyrocare Reports are Accurate & Reliable",
+      "index": 11
+    },
+    {
+      "text": "NAME",
+      "index": 12
+    },
+    {
+      "text": ": xxxx",
+      "index": 13
+    },
+    {
+      "text": "HOME COLLECTION :",
+      "index": 14
+    },
+    {
+      "text": "REF. BY",
+      "index": 15
+    },
+    {
+      "text": ": SELF",
+      "index": 16
+    },
+    {
+      "text": "XXXxxxXxXxxXXXX",
+      "index": 17
+    },
+    {
+      "text": "TEST ASKED",
+      "index": 18
+    },
+    {
+      "text": ": HEMOGRAM",
+      "index": 19
+    },
+    {
+      "text": "TEST NAME",
+      "index": 20
+    },
+    {
+      "text": "VALUE",
+      "index": 21
+    },
+    {
+      "text": "UNITS",
+      "index": 22
+    },
+    {
+      "text": "Bio. Ref. Interval.",
+      "index": 23
+    },
+    {
+      "text": "TOTAL LEUCOCYTES COUNT (WBC)",
+      "index": 24
+    },
+    {
+      "text": "7.85",
+      "index": 25
+    },
+    {
+      "text": "X 10 ³3 / μL",
+      "index": 26
+    },
+    {
+      "text": "4.0 - 10.0",
+      "index": 27
+    },
+    {
+      "text": "NEUTROPHILS",
+      "index": 28
+    },
+    {
+      "text": "57",
+      "index": 29
+    },
+    {
+      "text": "%",
+      "index": 30
+    },
+    {
+      "text": "40-80",
+      "index": 31
+    },
+    {
+      "text": "LYMPHOCYTE",
+      "index": 32
+    },
+    {
+      "text": "34",
+      "index": 33
+    },
+    {
+      "text": "%",
+      "index": 34
+    },
+    {
+      "text": "20-40",
+      "index": 35
+    },
+    {
+      "text": "MONOCYTES",
+      "index": 36
+    },
+    {
+      "text": "3.3",
+      "index": 37
+    },
+    {
+      "text": "%",
+      "index": 38
+    },
+    {
+      "text": "2-10",
+      "index": 39
+    },
+    {
+      "text": "EOSINOPHILS",
+      "index": 40
+    },
+    {
+      "text": "4.7",
+      "index": 41
+    },
+    {
+      "text": "%",
+      "index": 42
+    },
+    {
+      "text": "1-6",
+      "index": 43
+    },
+    {
+      "text": "BASOPHILS",
+      "index": 44
+    },
+    {
+      "text": "0.9",
+      "index": 45
+    },
+    {
+      "text": "%",
+      "index": 46
+    },
+    {
+      "text": "0-2",
+      "index": 47
+    },
+    {
+      "text": "IMMATURE GRANULOCYTE PERCENTAGE(IG%)",
+      "index": 48
+    },
+    {
+      "text": "0.1",
+      "index": 49
+    },
+    {
+      "text": "%",
+      "index": 50
+    },
+    {
+      "text": "0.0-0.4",
+      "index": 51
+    },
+    {
+      "text": "NEUTROPHILS - ABSOLUTE COUNT",
+      "index": 52
+    },
+    {
+      "text": "4.47",
+      "index": 53
+    },
+    {
+      "text": "X 10³3 / μL",
+      "index": 54
+    },
+    {
+      "text": "2.0-7.0",
+      "index": 55
+    },
+    {
+      "text": "LYMPHOCYTES - ABSOLUTE COUNT",
+      "index": 56
+    },
+    {
+      "text": "2.67",
+      "index": 57
+    },
+    {
+      "text": "X 10³ / μL",
+      "index": 58
+    },
+    {
+      "text": "1.0-3.0",
+      "index": 59
+    },
+    {
+      "text": "MONOCYTES - ABSOLUTE COUNT",
+      "index": 60
+    },
+    {
+      "text": "0.26",
+      "index": 61
+    },
+    {
+      "text": "X 10 ³3 / μL",
+      "index": 62
+    },
+    {
+      "text": "0.2 - 1.0",
+      "index": 63
+    },
+    {
+      "text": "BASOPHILS - ABSOLUTE COUNT",
+      "index": 64
+    },
+    {
+      "text": "0.07",
+      "index": 65
+    },
+    {
+      "text": "X 10³ / μL",
+      "index": 66
+    },
+    {
+      "text": "0.02 - 0.1",
+      "index": 67
+    },
+    {
+      "text": "EOSINOPHILS - ABSOLUTE COUNT",
+      "index": 68
+    },
+    {
+      "text": "0.37",
+      "index": 69
+    },
+    {
+      "text": "X 10³ / μL",
+      "index": 70
+    },
+    {
+      "text": "0.02 - 0.5",
+      "index": 71
+    },
+    {
+      "text": "IMMATURE GRANULOCYTES(IG)",
+      "index": 72
+    },
+    {
+      "text": "0.01",
+      "index": 73
+    },
+    {
+      "text": "X 10³ / μL",
+      "index": 74
+    },
+    {
+      "text": "0.0-0.3",
+      "index": 75
+    },
+    {
+      "text": "TOTAL RBC",
+      "index": 76
+    },
+    {
+      "text": "4.62",
+      "index": 77
+    },
+    {
+      "text": "X 10^6/μL",
+      "index": 78
+    },
+    {
+      "text": "3.8-4.8",
+      "index": 79
+    },
+    {
+      "text": "NUCLEATED RED BLOOD CELLS",
+      "index": 80
+    },
+    {
+      "text": "0.01",
+      "index": 81
+    },
+    {
+      "text": "X 10³3 / μL",
+      "index": 82
+    },
+    {
+      "text": "0.0-0.5",
+      "index": 83
+    },
+    {
+      "text": "NUCLEATED RED BLOOD CELLS %",
+      "index": 84
+    },
+    {
+      "text": "0.01",
+      "index": 85
+    },
+    {
+      "text": "%",
+      "index": 86
+    },
+    {
+      "text": "0.0-5.0",
+      "index": 87
+    },
+    {
+      "text": "HEMOGLOBIN",
+      "index": 88
+    },
+    {
+      "text": "12.9",
+      "index": 89
+    },
+    {
+      "text": "g/dL",
+      "index": 90
+    },
+    {
+      "text": "12.0-15.0",
+      "index": 91
+    },
+    {
+      "text": "HEMATOCRIT(PCV)",
+      "index": 92
+    },
+    {
+      "text": "39.4",
+      "index": 93
+    },
+    {
+      "text": "%",
+      "index": 94
+    },
+    {
+      "text": "36.0-46.0",
+      "index": 95
+    },
+    {
+      "text": "MEAN CORPUSCULAR VOLUME(MCV)",
+      "index": 96
+    },
+    {
+      "text": "85.3",
+      "index": 97
+    },
+    {
+      "text": "fL",
+      "index": 98
+    },
+    {
+      "text": "83.0-101.0",
+      "index": 99
+    },
+    {
+      "text": "MEAN CORPUSCULAR HEMOGLOBIN(MCH)",
+      "index": 100
+    },
+    {
+      "text": "27.9",
+      "index": 101
+    },
+    {
+      "text": "pq",
+      "index": 102
+    },
+    {
+      "text": "27.0-32.0",
+      "index": 103
+    },
+    {
+      "text": "MEAN CORP.HEMO.CONC(MCHC)",
+      "index": 104
+    },
+    {
+      "text": "32.7",
+      "index": 105
+    },
+    {
+      "text": "g/dL",
+      "index": 106
+    },
+    {
+      "text": "31.5-34.5",
+      "index": 107
+    },
+    {
+      "text": "RED CELL DISTRIBUTION WIDTH - SD(RDW-SD)",
+      "index": 108
+    },
+    {
+      "text": "40.2",
+      "index": 109
+    },
+    {
+      "text": "fL",
+      "index": 110
+    },
+    {
+      "text": "39.0-46.0",
+      "index": 111
+    },
+    {
+      "text": "RED CELL DISTRIBUTION WIDTH (RDW-CV)",
+      "index": 112
+    },
+    {
+      "text": "13",
+      "index": 113
+    },
+    {
+      "text": "%",
+      "index": 114
+    },
+    {
+      "text": "11.6-14.0",
+      "index": 115
+    },
+    {
+      "text": "PLATELET DISTRIBUTION WIDTH(PDW)",
+      "index": 116
+    },
+    {
+      "text": "10.2",
+      "index": 117
+    },
+    {
+      "text": "fL",
+      "index": 118
+    },
+    {
+      "text": "9.6-15.2",
+      "index": 119
+    },
+    {
+      "text": "MEAN PLATELET VOLUME(MPV)",
+      "index": 120
+    },
+    {
+      "text": "10",
+      "index": 121
+    },
+    {
+      "text": "fL",
+      "index": 122
+    },
+    {
+      "text": "6.5-12",
+      "index": 123
+    },
+    {
+      "text": "PLATELET COUNT",
+      "index": 124
+    },
+    {
+      "text": "254",
+      "index": 125
+    },
+    {
+      "text": "X 10³3 / μL",
+      "index": 126
+    },
+    {
+      "text": "150-410",
+      "index": 127
+    },
+    {
+      "text": "PLATELET TO LARGE CELL RATIO(PLCR)",
+      "index": 128
+    },
+    {
+      "text": "23.7",
+      "index": 129
+    },
+    {
+      "text": "%",
+      "index": 130
+    },
+    {
+      "text": "19.7-42.4",
+      "index": 131
+    },
+    {
+      "text": "PLATELETCRIT(PCT)",
+      "index": 132
+    },
+    {
+      "text": "0.25",
+      "index": 133
+    },
+    {
+      "text": "%",
+      "index": 134
+    },
+    {
+      "text": "0.19-0.39",
+      "index": 135
+    },
+    {
+      "text": "Remarks:",
+      "index": 136
+    },
+    {
+      "text": "Alert!! Predominantly normocytic normochromic with ovalocytes. Platelets:Appear adequate in smear.",
+      "index": 137
+    },
+    {
+      "text": "Please Correlate with clinical conditions.",
+      "index": 138
+    },
+    {
+      "text": "Method : Fully automated bidirectional analyser (6 Part Differential SYSMEX XN-1000)",
+      "index": 139
+    },
+    {
+      "text": "(This device performs hematology analyses according to the Hydrodynamic Focussing (DC method), Flow Cytometry Method",
+      "index": 140
+    },
+    {
+      "text": "(using a semiconductor laser), and SLS- hemoglobin method)",
+      "index": 141
+    },
+    {
+      "text": "/",
+      "index": 142
+    },
+    {
+      "text": "- End of report-",
+      "index": 143
+    },
+    {
+      "text": "Sample Collected on (SCT)",
+      "index": 144
+    },
+    {
+      "text": ": 13 Nov 2023 08:27",
+      "index": 145
+    },
+    {
+      "text": "Sample Received on (SRT)",
+      "index": 146
+    },
+    {
+      "text": ": 13 Nov 2023 13:40",
+      "index": 147
+    },
+    {
+      "text": "Report Released on (RRT)",
+      "index": 148
+    },
+    {
+      "text": ": 13 Nov 2023 15:41",
+      "index": 149
+    },
+    {
+      "text": "Sample Type",
+      "index": 150
+    },
+    {
+      "text": "EDTA",
+      "index": 151
+    },
+    {
+      "text": "Labcode",
+      "index": 152
+    },
+    {
+      "text": ": 1311066137/PP004",
+      "index": 153
+    },
+    {
+      "text": "Dr Anusha B, MD (Path)",
+      "index": 154
+    },
+    {
+      "text": "Barcode",
+      "index": 155
+    },
+    {
+      "text": ": BK080052",
+      "index": 156
+    },
+    {
+      "text": "Page : 1 of 2",
+      "index": 157
+    }
+  ],
+  "cbc_fourteen": {
+    "hemoglobin": {
+      "found": true,
+      "observed_value": "12.9",
+      "unit": "g/dL",
+      "test_name": "Hemoglobin"
+    },
+    "hematocrit": {
+      "found": true,
+      "observed_value": "39.4",
+      "unit": "%",
+      "test_name": "Hematocrit"
+    },
+    "rbc": {
+      "found": true,
+      "observed_value": "4.62",
+      "unit": "",
+      "test_name": "RBC count"
+    },
+    "wbc": {
+      "found": true,
+      "observed_value": "10.0",
+      "unit": "",
+      "test_name": "WBC count"
+    },
+    "platelets": {
+      "found": true,
+      "observed_value": "23.7",
+      "unit": "",
+      "test_name": "Platelet count"
+    },
+    "mcv": {
+      "found": true,
+      "observed_value": "85.3",
+      "unit": "fL",
+      "test_name": "MCV"
+    },
+    "mch": {
+      "found": true,
+      "observed_value": "27.9",
+      "unit": "pg",
+      "test_name": "MCH"
+    },
+    "mchc": {
+      "found": true,
+      "observed_value": "32.7",
+      "unit": "g/dL",
+      "test_name": "MCHC"
+    },
+    "rdw": {
+      "found": true,
+      "observed_value": "13.0",
+      "unit": "%",
+      "test_name": "RDW"
+    },
+    "neutrophils": {
+      "found": true,
+      "observed_value": "10.0",
+      "unit": "%",
+      "test_name": "Neutrophils"
+    },
+    "lymphocytes": {
+      "found": true,
+      "observed_value": "2.67",
+      "unit": "%",
+      "test_name": "Lymphocytes"
+    },
+    "monocytes": {
+      "found": true,
+      "observed_value": "4.7",
+      "unit": "%",
+      "test_name": "Monocytes"
+    },
+    "eosinophils": {
+      "found": true,
+      "observed_value": "0.9",
+      "unit": "%",
+      "test_name": "Eosinophils"
+    },
+    "basophils": {
+      "found": true,
+      "observed_value": "0.9",
+      "unit": "%",
+      "test_name": "Basophils"
+    }
+  },
+  "structured_data": {
+    "patient_info": {},
+    "laboratory_info": {},
+    "haematology_report": [
+      {
+        "test_name": "Hemoglobin",
+        "observed_value": "12.9",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "Hematocrit",
+        "observed_value": "39.4",
+        "unit": "%"
+      },
+      {
+        "test_name": "RBC count",
+        "observed_value": "4.62",
+        "unit": ""
+      },
+      {
+        "test_name": "WBC count",
+        "observed_value": "10.0",
+        "unit": ""
+      },
+      {
+        "test_name": "Platelet count",
+        "observed_value": "23.7",
+        "unit": ""
+      },
+      {
+        "test_name": "MCV",
+        "observed_value": "85.3",
+        "unit": "fL"
+      },
+      {
+        "test_name": "MCH",
+        "observed_value": "27.9",
+        "unit": "pg"
+      },
+      {
+        "test_name": "MCHC",
+        "observed_value": "32.7",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "RDW",
+        "observed_value": "13.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Neutrophils",
+        "observed_value": "10.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Lymphocytes",
+        "observed_value": "2.67",
+        "unit": "%"
+      },
+      {
+        "test_name": "Monocytes",
+        "observed_value": "4.7",
+        "unit": "%"
+      },
+      {
+        "test_name": "Eosinophils",
+        "observed_value": "0.9",
+        "unit": "%"
+      },
+      {
+        "test_name": "Basophils",
+        "observed_value": "0.9",
+        "unit": "%"
+      }
+    ],
+    "blood_indices": [],
+    "morphology": {},
+    "footer_info": {},
+    "other_fields": {}
+  },
+  "structured_data_original": {
+    "patient_info": {},
+    "laboratory_info": {},
+    "haematology_report": [
+      {
+        "test_name": "Hemoglobin",
+        "observed_value": "12.9",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "Hematocrit",
+        "observed_value": "39.4",
+        "unit": "%"
+      },
+      {
+        "test_name": "RBC count",
+        "observed_value": "4.62",
+        "unit": ""
+      },
+      {
+        "test_name": "WBC count",
+        "observed_value": "10.0",
+        "unit": ""
+      },
+      {
+        "test_name": "Platelet count",
+        "observed_value": "23.7",
+        "unit": ""
+      },
+      {
+        "test_name": "MCV",
+        "observed_value": "85.3",
+        "unit": "fL"
+      },
+      {
+        "test_name": "MCH",
+        "observed_value": "27.9",
+        "unit": "pg"
+      },
+      {
+        "test_name": "MCHC",
+        "observed_value": "32.7",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "RDW",
+        "observed_value": "13.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Neutrophils",
+        "observed_value": "10.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Lymphocytes",
+        "observed_value": "2.67",
+        "unit": "%"
+      },
+      {
+        "test_name": "Monocytes",
+        "observed_value": "4.7",
+        "unit": "%"
+      },
+      {
+        "test_name": "Eosinophils",
+        "observed_value": "0.9",
+        "unit": "%"
+      },
+      {
+        "test_name": "Basophils",
+        "observed_value": "0.9",
+        "unit": "%"
+      }
+    ],
+    "blood_indices": [],
+    "morphology": {},
+    "footer_info": {},
+    "other_fields": {}
+  },
+  "structured_data_preprocessed": null
+}

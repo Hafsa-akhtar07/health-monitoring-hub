@@ -112,7 +112,7 @@ function ManualEntry({ onDataSubmit }) {
               onChange={handleChange}
               step="0.1"
               required
-              placeholder="12.0-15.5"
+              placeholder="11.5-17.0"
             />
           </div>
 
@@ -128,7 +128,7 @@ function ManualEntry({ onDataSubmit }) {
               onChange={handleChange}
               step="0.1"
               required
-              placeholder="4.0-5.0"
+              placeholder="4.0-6.1"
             />
           </div>
 
@@ -143,7 +143,7 @@ function ManualEntry({ onDataSubmit }) {
               value={formData.wbc}
               onChange={handleChange}
               required
-              placeholder="4000-11000"
+              placeholder="4000-10000"
             />
           </div>
 
@@ -158,7 +158,7 @@ function ManualEntry({ onDataSubmit }) {
               value={formData.platelets}
               onChange={handleChange}
               required
-              placeholder="150000-450000"
+              placeholder="150000-400000"
             />
           </div>
 
@@ -171,7 +171,7 @@ function ManualEntry({ onDataSubmit }) {
               value={formData.hematocrit}
               onChange={handleChange}
               step="0.1"
-              placeholder="36-46"
+              placeholder="36-55"
             />
           </div>
 
@@ -223,7 +223,7 @@ function ManualEntry({ onDataSubmit }) {
               value={formData.rdw}
               onChange={handleChange}
               step="0.1"
-              placeholder="11.5-14.5"
+              placeholder="12-15"
             />
           </div>
           {/* Optional WBC differentials - when any are filled, ML uses model 2 */}

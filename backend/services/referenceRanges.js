@@ -6,38 +6,39 @@
 const referenceRanges = {
   // Hemoglobin (g/dL)
   hemoglobin: {
-    male: { min: 13.5, max: 17.5 },
-    female: { min: 12.0, max: 15.5 },
+    // Cleveland Clinic (adults)
+    male: { min: 13.0, max: 17.0 },
+    female: { min: 11.5, max: 15.5 },
     unit: 'g/dL'
   },
   
   // Red Blood Cells (RBC) - million cells/μL
   rbc: {
-    // Align with frontend ranges (frontend uses 4.5 - 5.9 for both).
-    male: { min: 4.5, max: 5.9 },
-    female: { min: 4.5, max: 5.9 },
+    // Cleveland Clinic (adults)
+    male: { min: 4.5, max: 6.1 },
+    female: { min: 4.0, max: 5.4 },
     unit: 'million cells/μL'
   },
   
   // White Blood Cells (WBC) - cells/μL
   wbc: {
     min: 4000,
-    max: 11000,
+    max: 10000,
     unit: 'cells/μL'
   },
   
   // Platelets - cells/μL
   platelets: {
     min: 150000,
-    max: 450000,
+    max: 400000,
     unit: 'cells/μL'
   },
   
   // Hematocrit (%)
   hematocrit: {
-    // Align with frontend ranges (frontend uses 41 - 53).
-    male: { min: 41, max: 53 },
-    female: { min: 41, max: 53 },
+    // Cleveland Clinic (adults)
+    male: { min: 40, max: 55 },
+    female: { min: 36, max: 48 },
     unit: '%'
   },
   
@@ -51,7 +52,7 @@ const referenceRanges = {
   // Mean Corpuscular Hemoglobin (MCH) - pg
   mch: {
     min: 27,
-    max: 33,
+    max: 31,
     unit: 'pg'
   },
   
@@ -64,8 +65,9 @@ const referenceRanges = {
   
   // Red Cell Distribution Width (RDW) - %
   rdw: {
-    min: 11.5,
-    max: 14.5,
+    // Cleveland Clinic (adults)
+    min: 12,
+    max: 15,
     unit: '%'
   }
 };

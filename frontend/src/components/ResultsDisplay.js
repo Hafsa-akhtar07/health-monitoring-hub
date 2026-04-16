@@ -4,108 +4,371 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Alert, AlertDescription } from './ui/alert';
 import api from '../utils/api';
 
-const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
+const STANDARD_CBC_PARAMS = [
+  'hemoglobin',
+  'hematocrit',
+  'rbc',
+  'wbc',
+  'platelets',
+  'mcv',
+  'rdw',
+  'mch',
+  'mchc',
+  'neutrophils',
+  'lymphocytes',
+  'monocytes',
+  'eosinophils',
+  'basophils'
+];
+
+const ResultsDisplay = ({ reportId, cbcData, gender, onBack, onUploadNew }) => {
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [openAIResponse, setOpenAIResponse] = useState(null);
   const [openAILoading, setOpenAILoading] = useState(false);
-  const [mlResult, setMlResult] = useState(null); // backend ML model output
+  const [mlResult, setMlResult] = useState(null);
   const [analysisWarnings, setAnalysisWarnings] = useState([]);
   const hasAnalyzed = useRef(false);
+  const recommendationsRef = useRef(null);
 
+  const genderLower = gender ? String(gender).toLowerCase() : null;
+  const isMale = genderLower === 'male' || genderLower === 'm';
+  const isFemale = genderLower === 'female' || genderLower === 'f';
+
+  // Cleveland Clinic (adults). Use gender-specific where applicable.
   const referenceRanges = {
-    hemoglobin: { min: 13.5, max: 17.5, unit: 'g/dL' },
-    // WBC and platelets values in cbcData are ABSOLUTE COUNTS (cells/µL)
-    // Use same ranges as backend rule-based engine to keep severity consistent.
-    wbc: { min: 4000, max: 11000, unit: 'cells/µL' },
-    platelets: { min: 150000, max: 450000, unit: 'cells/µL' },
-    rbc: { min: 4.5, max: 5.9, unit: '×10⁶/µL' },
-    hematocrit: { min: 41, max: 53, unit: '%' },
-    mcv: { min: 80, max: 100, unit: 'fL' },
-    mch: { min: 27, max: 33, unit: 'pg' },
-    mchc: { min: 32, max: 36, unit: 'g/dL' },
-    // WBC differential counts (percentages)
-    neutrophils: { min: 40, max: 80, unit: '%'},
-    lymphocytes: { min: 20, max: 45, unit: '%'},
-    monocytes: { min: 2, max: 10, unit: '%'},
-    eosinophils: { min: 1, max: 6, unit: '%'},
-    basophils: { min: 0, max: 1, unit: '%'}
+    // Cleveland Clinic (adults). WBC/Platelets in absolute counts (cells/µL).
+    wbc: { min: 4000, max: 10000, unit: 'cells/µL', displayName: 'WBC' },
+    rbc: {
+      min: isMale ? 4.5 : 4.0,
+      max: isMale ? 6.1 : 5.4,
+      unit: 'million cells/µL',
+      displayName: 'RBC',
+      note: !isMale && !isFemale ? 'Female: 4.0–5.4 | Male: 4.5–6.1' : undefined
+    },
+    hemoglobin: {
+      min: isMale ? 13.0 : 11.5,
+      max: isMale ? 17.0 : 15.5,
+      unit: 'g/dL',
+      displayName: 'Hemoglobin',
+      note: !isMale && !isFemale ? 'Female: 11.5–15.5 | Male: 13–17' : undefined
+    },
+    hematocrit: {
+      min: isMale ? 40 : 36,
+      max: isMale ? 55 : 48,
+      unit: '%',
+      displayName: 'Hematocrit',
+      note: !isMale && !isFemale ? 'Female: 36–48 | Male: 40–55' : undefined
+    },
+    mcv: { min: 80, max: 100, unit: 'fL', displayName: 'MCV' },
+    rdw: { min: 12, max: 15, unit: '%', displayName: 'RDW' },
+    mch: { min: 27, max: 31, unit: 'pg', displayName: 'MCH' },
+    mchc: { min: 32, max: 36, unit: 'g/dL', displayName: 'MCHC' },
+    platelets: { min: 150000, max: 400000, unit: 'cells/µL', displayName: 'Platelets' },
+    // Differentials in % (model trained on % and most reports provide %)
+    neutrophils: { min: 40, max: 80, unit: '%', displayName: 'Neutrophils' },
+    lymphocytes: { min: 20, max: 40, unit: '%', displayName: 'Lymphocytes' },
+    monocytes: { min: 2, max: 10, unit: '%', displayName: 'Monocytes' },
+    eosinophils: { min: 1, max: 6, unit: '%', displayName: 'Eosinophils' },
+    basophils: { min: 0, max: 1, unit: '%', displayName: 'Basophils' }
+  };
+
+  // FIXED: Proper 5-range categorization with range-width based calculation
+  const getCategory = (value, min, max) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return 'normal';
+    
+    // Handle edge case where min equals max
+    if (min === max) {
+      if (numValue === min) return 'normal';
+      if (numValue < min) {
+        const percentBelow = ((min - numValue) / min) * 100;
+        if (percentBelow > 30) return 'very-low';
+        if (percentBelow > 10) return 'low';
+        return 'mild-low';
+      }
+      if (numValue > max) {
+        const percentAbove = ((numValue - max) / max) * 100;
+        if (percentAbove > 30) return 'very-high';
+        if (percentAbove > 10) return 'high';
+        return 'mild-high';
+      }
+    }
+    
+    // Calculate normal range width
+    const rangeWidth = max - min;
+    
+    if (numValue < min) {
+      // Calculate how far below as percentage of the normal range width
+      const percentBelowNormal = ((min - numValue) / rangeWidth) * 100;
+      if (percentBelowNormal > 30) return 'very-low';
+      if (percentBelowNormal > 10) return 'low';
+      return 'mild-low';
+    }
+    
+    if (numValue > max) {
+      // Calculate how far above as percentage of the normal range width
+      const percentAboveNormal = ((numValue - max) / rangeWidth) * 100;
+      if (percentAboveNormal > 30) return 'very-high';
+      if (percentAboveNormal > 10) return 'high';
+      return 'mild-high';
+    }
+    
+    return 'normal';
+  };
+
+  // FIXED: Updated color mapping for 7 categories
+  const getCategoryColor = (category) => {
+    switch (category) {
+      case 'very-low': return '#991b1b';     // Dark Red - Severe
+      case 'low': return '#dc2626';          // Red - Moderate
+      case 'mild-low': return '#f97316';     // Orange - Mild
+      case 'normal': return '#22c55e';       // Green - Normal
+      case 'mild-high': return '#eab308';    // Yellow - Mild
+      case 'high': return '#f59e0b';         // Amber - Moderate
+      case 'very-high': return '#dc2626';    // Red - Severe
+      default: return '#9ca3af';
+    }
+  };
+
+  // FIXED: Gradient showing all 7 zones
+  const getCategoryGradient = () => {
+    return 'linear-gradient(90deg, #991b1b 0%, #dc2626 15%, #f97316 30%, #22c55e 50%, #eab308 70%, #f59e0b 85%, #dc2626 100%)';
+  };
+
+  const getStatusTextFromCategory = (category) => {
+    switch (category) {
+      case 'very-low': return 'Severely Low';
+      case 'low': return 'Moderately Low';
+      case 'mild-low': return 'Mildly Low';
+      case 'normal': return 'Normal';
+      case 'mild-high': return 'Mildly High';
+      case 'high': return 'Moderately High';
+      case 'very-high': return 'Severely High';
+      case 'missing': return 'Not Extracted';
+      default: return 'Normal';
+    }
+  };
+
+  const normalizeCbcForDisplay = useCallback((input) => {
+    const out = { ...(input || {}) };
+    const toNum = (v) => {
+      const n = v === null || v === undefined || v === '' ? NaN : parseFloat(v);
+      return Number.isNaN(n) ? null : n;
+    };
+
+    // WBC and Platelets: normalize to cells/µL
+    const wbc = toNum(out.wbc);
+    if (wbc != null && wbc > 0 && wbc < 200) out.wbc = wbc * 1000; // k/mcL -> cells/µL
+
+    const platelets = toNum(out.platelets);
+    if (platelets != null && platelets > 0 && platelets < 5000) out.platelets = platelets * 1000; // k/mcL -> cells/µL
+
+    // Differentials: normalize to %
+    const wbcAbs = toNum(out.wbc);
+    const diffKeys = ['neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils'];
+    diffKeys.forEach((k) => {
+      const v = toNum(out[k]);
+      if (v == null) return;
+      if (v >= 0 && v <= 100) return; // already %
+      if (wbcAbs != null && wbcAbs > 0) {
+        const diffAbs = v > 0 && v < 200 ? v * 1000 : v;
+        const pct = (diffAbs / wbcAbs) * 100;
+        if (pct >= 0 && pct <= 100) out[k] = Math.round(pct * 100) / 100;
+      }
+    });
+
+    return out;
+  }, []);
+
+  // FIXED: Status text using range-width calculation consistently
+  const getStatusText = (value, min, max) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return 'Value not available';
+    
+    // Handle edge case where min equals max
+    if (min === max) {
+      if (numValue === min) return 'Normal';
+      if (numValue < min) {
+        const percentBelow = ((min - numValue) / min) * 100;
+        if (percentBelow > 30) return 'Severely Low';
+        if (percentBelow > 10) return 'Moderately Low';
+        return 'Mildly Low';
+      }
+      if (numValue > max) {
+        const percentAbove = ((numValue - max) / max) * 100;
+        if (percentAbove > 30) return 'Severely High';
+        if (percentAbove > 10) return 'Moderately High';
+        return 'Mildly High';
+      }
+    }
+    
+    const rangeWidth = max - min;
+    
+    if (numValue < min) {
+      const percentBelowNormal = ((min - numValue) / min) * 100;
+      if (percentBelowNormal > 30) return 'Severely Low';
+      if (percentBelowNormal > 10) return 'Moderately Low';
+      return 'Mildly Low';
+    }
+    
+    if (numValue > max) {
+      const percentAboveNormal = ((numValue - max) / max) * 100;
+      if (percentAboveNormal > 30) return 'Severely High';
+      if (percentAboveNormal > 10) return 'Moderately High';
+      return 'Mildly High';
+    }
+    
+    return 'Normal';
+  };
+
+  // FIXED: Status color using consistent thresholds
+  const getStatusColor = (value, min, max) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return '#6b7280';
+    
+    // Handle edge case where min equals max
+    if (min === max) {
+      if (numValue === min) return '#22c55e';
+      if (numValue < min) {
+        const percentBelow = ((min - numValue) / min) * 100;
+        if (percentBelow > 30) return '#991b1b';
+        if (percentBelow > 10) return '#dc2626';
+        return '#f97316';
+      }
+      if (numValue > max) {
+        const percentAbove = ((numValue - max) / max) * 100;
+        if (percentAbove > 30) return '#991b1b';
+        if (percentAbove > 10) return '#dc2626';
+        return '#eab308';
+      }
+    }
+    
+    const rangeWidth = max - min;
+    
+    if (numValue < min) {
+      const percentBelowNormal = ((min - numValue) / rangeWidth) * 100;
+      if (percentBelowNormal > 30) return '#991b1b';  // Severe - Dark Red
+      if (percentBelowNormal > 10) return '#dc2626';  // Moderate - Red
+      return '#f97316';  // Mild - Orange
+    }
+    
+    if (numValue > max) {
+      const percentAboveNormal = ((numValue - max) / rangeWidth) * 100;
+      if (percentAboveNormal > 30) return '#991b1b';  // Severe - Dark Red
+      if (percentAboveNormal > 10) return '#dc2626';  // Moderate - Red
+      return '#eab308';  // Mild - Yellow
+    }
+    
+    return '#22c55e';  // Normal - Green
+  };
+
+  // FIXED: Bar position with proper scaling
+  const getBarPosition = (value, min, max) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) return 50;
+    
+    // Handle edge case where min equals max
+    if (min === max) {
+      if (numValue === min) return 50;
+      // For single-point ranges, use percentage deviation from the value
+      const maxAllowedDeviation = min * 2; // Allow up to 200% deviation
+      let position = 50 + ((numValue - min) / maxAllowedDeviation) * 50;
+      position = Math.max(0, Math.min(100, position));
+      return position;
+    }
+    
+    const rangeWidth = max - min;
+    
+    // Show up to 3x the normal range for better visualization
+    const maxAllowedDeviation = rangeWidth * 3;
+    const extendedMin = min - maxAllowedDeviation;
+    const extendedMax = max + maxAllowedDeviation;
+    const totalRange = extendedMax - extendedMin;
+    
+    // Clamp value to extended range for visualization
+    let clampedValue = Math.max(extendedMin, Math.min(extendedMax, numValue));
+    
+    // Calculate position (0-100%)
+    let position = ((clampedValue - extendedMin) / totalRange) * 100;
+    position = Math.max(0, Math.min(100, position));
+    
+    return position;
   };
 
   const analyzeValues = useCallback(() => {
     if (!cbcData) return null;
+    const normalized = normalizeCbcForDisplay(cbcData);
 
     const results = {
       parameters: {},
       normalCount: 0,
-      abnormalCount: 0,
-      criticalCount: 0,
-      overallSeverity: 'normal',
+      lowCount: 0,
+      highCount: 0,
+      totalCount: STANDARD_CBC_PARAMS.length,
+      extractedCount: 0,
+      overallStatus: 'normal',
       detectedConditions: []
     };
 
-    Object.entries(cbcData).forEach(([key, value]) => {
+    STANDARD_CBC_PARAMS.forEach((key) => {
+      const value = normalized?.[key];
       const range = referenceRanges[key];
-      if (!range || isNaN(value)) return;
+      if (!range) return;
+
+      if (
+        value === null ||
+        value === undefined ||
+        value === '' ||
+        Number.isNaN(parseFloat(value))
+      ) {
+        results.parameters[key] = {
+          value: null,
+          referenceRange: range,
+          category: 'missing',
+          statusText: 'Not Extracted',
+          statusCategory: 'missing',
+          barPosition: 50,
+          message: 'Value not extracted from this report.'
+        };
+        return;
+      }
 
       const numValue = parseFloat(value);
-      let status = 'normal';
-      let severity = 'normal';
-      let flag = 'NORMAL';
-
-      if (numValue < range.min) {
-        status = 'low';
-        const deviation = ((range.min - numValue) / range.min) * 100;
-        if (deviation > 20) {
-          severity = 'critical';
-          flag = 'CRITICAL';
-        } else if (deviation > 10) {
-          severity = 'abnormal';
-          flag = 'LOW';
-        } else {
-          severity = 'mild';
-          flag = 'LOW';
-        }
-      } else if (numValue > range.max) {
-        status = 'high';
-        const deviation = ((numValue - range.max) / range.max) * 100;
-        if (deviation > 20) {
-          severity = 'critical';
-          flag = 'CRITICAL';
-        } else if (deviation > 10) {
-          severity = 'abnormal';
-          flag = 'HIGH';
-        } else {
-          severity = 'mild';
-          flag = 'HIGH';
-        }
-      }
+      results.extractedCount++;
+      const category = getCategory(numValue, range.min, range.max);
+      const statusText = getStatusTextFromCategory(category);
+      
+      let statusCategory = 'normal';
+      if (category === 'very-low' || category === 'low' || category === 'mild-low') statusCategory = 'low';
+      if (category === 'high' || category === 'very-high' || category === 'mild-high') statusCategory = 'high';
+      
+      if (statusCategory === 'low') results.lowCount++;
+      else if (statusCategory === 'high') results.highCount++;
+      else results.normalCount++;
 
       results.parameters[key] = {
         value: numValue,
         referenceRange: range,
-        status,
-        severity,
-        flag,
-        message: generateParameterMessage(key, numValue, range, status)
+        category,
+        statusText,
+        statusCategory,
+        barPosition: getBarPosition(numValue, range.min, range.max),
+        message: generateParameterMessage(key, numValue, range, statusCategory)
       };
-
-      if (severity === 'critical') results.criticalCount++;
-      else if (severity === 'abnormal' || severity === 'mild') results.abnormalCount++;
-      else results.normalCount++;
     });
 
-    // Determine overall severity
-    if (results.criticalCount > 0) results.overallSeverity = 'critical';
-    else if (results.abnormalCount > 0) results.overallSeverity = 'abnormal';
-    else results.overallSeverity = 'normal';
+    // Determine overall status
+    if (results.lowCount > results.highCount) results.overallStatus = 'low';
+    else if (results.highCount > results.lowCount) results.overallStatus = 'high';
+    else results.overallStatus = 'normal';
 
     // Detect possible conditions
     results.detectedConditions = detectConditions(results.parameters);
 
     return results;
-  }, [cbcData, referenceRanges]);
+  }, [cbcData]);
 
   const generateParameterMessage = (param, value, range, status) => {
     const messages = {
@@ -126,39 +389,45 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
       }
     };
 
-    return messages[param]?.[status] || `Value is ${status} compared to normal range.`;
+    return messages[param]?.[status] || `${value} ${range.unit} is ${status} compared to normal range (${range.min}-${range.max} ${range.unit}).`;
   };
 
   const detectConditions = (parameters) => {
     const conditions = [];
 
-    if (parameters.hemoglobin?.severity === 'critical' && parameters.hemoglobin?.status === 'low') {
+    if (parameters.hemoglobin?.statusCategory === 'low') {
       conditions.push({
-        name: 'Anemia',
+        name: 'Possible Anemia',
         confidence: 0.85,
-        description: 'Severely low hemoglobin levels may indicate anemia.',
-        severity: 'critical',
-        recommendations: ['Consult hematologist', 'Iron supplement', 'Diet rich in iron']
+        description: 'Low hemoglobin levels may indicate anemia. Further testing may be needed.',
+        recommendations: ['Consult hematologist', 'Consider iron-rich diet', 'Monitor fatigue levels']
       });
     }
 
-    if (parameters.wbc?.severity === 'critical' && parameters.wbc?.status === 'high') {
+    if (parameters.wbc?.statusCategory === 'high') {
       conditions.push({
-        name: 'Possible Infection',
+        name: 'Possible Infection/Inflammation',
         confidence: 0.75,
-        description: 'Elevated white blood cells may indicate infection.',
-        severity: 'critical',
-        recommendations: ['Consult doctor', 'Antibiotics if bacterial', 'Rest and hydration']
+        description: 'Elevated white blood cells may indicate infection or inflammatory response.',
+        recommendations: ['Consult doctor', 'Monitor for fever', 'Rest and hydration']
       });
     }
 
-    if (parameters.platelets?.severity === 'critical') {
+    if (parameters.platelets?.statusCategory === 'low') {
       conditions.push({
-        name: 'Platelet Disorder',
+        name: 'Thrombocytopenia Risk',
         confidence: 0.65,
-        description: 'Abnormal platelet count may indicate clotting issues.',
-        severity: 'critical',
-        recommendations: ['Hematology consultation', 'Avoid aspirin', 'Monitor bleeding']
+        description: 'Low platelet count may increase bleeding risk.',
+        recommendations: ['Hematology consultation', 'Avoid blood thinners', 'Monitor for bruising']
+      });
+    }
+
+    if (parameters.platelets?.statusCategory === 'high') {
+      conditions.push({
+        name: 'Thrombocytosis Risk',
+        confidence: 0.65,
+        description: 'High platelet count may indicate clotting tendencies.',
+        recommendations: ['Hematology consultation', 'Stay hydrated', 'Monitor for unusual clotting']
       });
     }
 
@@ -172,16 +441,15 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
       setOpenAIResponse(null);
       setMlResult(null);
 
-      // Ask backend to analyze and get suggestions + ML diagnosis
+      const normalizedCbcData = normalizeCbcForDisplay(cbcData);
       const response = await api.post('/analyze', {
-        cbcData,
+        cbcData: normalizedCbcData,
         reportId,
-        gender: null
+        gender: gender || null
       });
 
       const backendAnalysis = response.data?.analysis;
 
-      // Capture ML model output from backend
       if (backendAnalysis?.ml) {
         setMlResult(backendAnalysis.ml);
       }
@@ -201,6 +469,12 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
           disclaimer: suggestions.disclaimer || 'This information is for educational purposes only and not a substitute for professional medical advice.'
         };
         setOpenAIResponse(mapped);
+        
+        setTimeout(() => {
+          if (recommendationsRef.current) {
+            recommendationsRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
       } else {
         setOpenAIResponse(null);
       }
@@ -223,15 +497,12 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
     setLoading(true);
     setError(null);
 
-    // Simulate analysis with setTimeout
     setTimeout(() => {
       const analysisResults = analyzeValues();
       
       if (analysisResults) {
         setAnalysis(analysisResults);
         hasAnalyzed.current = true;
-        
-        // Fetch AI-powered recommendations from backend (OpenAI or rule-based)
         fetchOpenAIRecommendations();
       } else {
         setError('Analysis failed. Please try again.');
@@ -247,22 +518,19 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
     }
   }, [cbcData, handleAnalyze]);
 
-  const getSeverityColor = (severity) => {
-    switch (severity) {
-      case 'critical': return 'bg-red-100 text-red-800 border-red-200';
-      case 'abnormal':
-      case 'mild': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'normal': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+  const getOverallStatusColor = (status) => {
+    switch (status) {
+      case 'low': return 'bg-red-100 text-red-800 border-red-200';
+      case 'high': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      default: return 'bg-green-100 text-green-800 border-green-200';
     }
   };
 
-  const getSeverityIcon = (severity) => {
-    switch (severity) {
-      case 'critical': return 'fas fa-exclamation-triangle';
-      case 'abnormal': return 'fas fa-exclamation-circle';
-      case 'normal': return 'fas fa-check-circle';
-      default: return 'fas fa-info-circle';
+  const getOverallStatusIcon = (status) => {
+    switch (status) {
+      case 'low': return 'fas fa-arrow-down';
+      case 'high': return 'fas fa-arrow-up';
+      default: return 'fas fa-check-circle';
     }
   };
 
@@ -272,154 +540,33 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
       return;
     }
 
-    // Create a new window for printing
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert('Please allow popups to export PDF');
       return;
     }
 
-    // Get current date
     const currentDate = new Date().toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
 
-    // Build HTML content for print
-    const printHTML = `
-      <!DOCTYPE html>
+    const printHTML = `<!DOCTYPE html>
       <html>
         <head>
           <title>CBC Analysis Report - ${currentDate}</title>
           <style>
-            @media print {
-              @page {
-                margin: 1cm;
-                size: A4;
-              }
-            }
-            body {
-              font-family: 'Arial', sans-serif;
-              margin: 0;
-              padding: 20px;
-              color: #333;
-              background: white;
-            }
-            .header {
-              border-bottom: 3px solid #8B0000;
-              padding-bottom: 15px;
-              margin-bottom: 30px;
-            }
-            .header h1 {
-              color: #8B0000;
-              margin: 0 0 5px 0;
-              font-size: 28px;
-            }
-            .header p {
-              color: #666;
-              margin: 0;
-              font-size: 14px;
-            }
-            .section {
-              margin-bottom: 30px;
-              page-break-inside: avoid;
-            }
-            .section-title {
-              color: #8B0000;
-              font-size: 20px;
-              font-weight: bold;
-              margin-bottom: 15px;
-              border-bottom: 2px solid #FFE4E1;
-              padding-bottom: 8px;
-            }
-            .summary-grid {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 15px;
-              margin-bottom: 20px;
-            }
-            .summary-item {
-              padding: 12px;
-              border: 1px solid #ddd;
-              border-radius: 5px;
-              background: #f9f9f9;
-            }
-            .summary-item strong {
-              color: #8B0000;
-              display: block;
-              margin-bottom: 5px;
-            }
-            .parameters-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-top: 15px;
-            }
-            .parameters-table th {
-              background: #8B0000;
-              color: white;
-              padding: 12px;
-              text-align: left;
-              font-weight: bold;
-            }
-            .parameters-table td {
-              padding: 10px 12px;
-              border-bottom: 1px solid #ddd;
-            }
-            .parameters-table tr:nth-child(even) {
-              background: #f9f9f9;
-            }
-            .status-badge {
-              display: inline-block;
-              padding: 4px 10px;
-              border-radius: 12px;
-              font-size: 12px;
-              font-weight: bold;
-            }
-            .status-normal { background: #d4edda; color: #155724; }
-            .status-abnormal { background: #fff3cd; color: #856404; }
-            .status-critical { background: #f8d7da; color: #721c24; }
-            .conditions-list {
-              list-style: none;
-              padding: 0;
-            }
-            .conditions-list li {
-              padding: 10px;
-              margin-bottom: 8px;
-              border-left: 4px solid #8B0000;
-              background: #fff8f8;
-            }
-            .recommendations {
-              background: #f0f8ff;
-              padding: 15px;
-              border-left: 4px solid #3B82F6;
-              margin-top: 15px;
-            }
-            .recommendations h4 {
-              color: #1e40af;
-              margin-top: 0;
-            }
-            .recommendations ul {
-              margin: 10px 0;
-              padding-left: 20px;
-            }
-            .disclaimer {
-              margin-top: 40px;
-              padding: 15px;
-              background: #fff3cd;
-              border: 1px solid #ffc107;
-              border-radius: 5px;
-              font-size: 12px;
-              color: #856404;
-            }
-            .footer {
-              margin-top: 40px;
-              padding-top: 20px;
-              border-top: 1px solid #ddd;
-              text-align: center;
-              color: #666;
-              font-size: 12px;
-            }
+            @media print { @page { margin: 1cm; size: A4; } }
+            body { font-family: 'Arial', sans-serif; margin: 0; padding: 20px; color: #333; background: white; }
+            .header { border-bottom: 3px solid #8B0000; padding-bottom: 15px; margin-bottom: 30px; }
+            .header h1 { color: #8B0000; margin: 0; font-size: 28px; }
+            .section { margin-bottom: 30px; page-break-inside: avoid; }
+            .section-title { color: #8B0000; font-size: 20px; font-weight: bold; margin-bottom: 15px; border-bottom: 2px solid #FFE4E1; padding-bottom: 8px; }
+            .parameters-table { width: 100%; border-collapse: collapse; }
+            .parameters-table th { background: #8B0000; color: white; padding: 12px; text-align: left; }
+            .parameters-table td { padding: 10px 12px; border-bottom: 1px solid #ddd; }
+            .disclaimer { margin-top: 40px; padding: 15px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; font-size: 12px; }
           </style>
         </head>
         <body>
@@ -427,185 +574,87 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
             <h1>Health Monitoring Hub - CBC Analysis Report</h1>
             <p>Generated on ${currentDate}</p>
           </div>
-
           <div class="section">
             <div class="section-title">Overall Summary</div>
-            <div class="summary-grid">
-              <div class="summary-item">
-                <strong>Overall Status:</strong>
-                <span class="status-badge status-${analysis.overallSeverity}">
-                  ${analysis.overallSeverity.toUpperCase()}
-                </span>
-              </div>
-              <div class="summary-item">
-                <strong>Normal Parameters:</strong> ${analysis.normalCount}
-              </div>
-              <div class="summary-item">
-                <strong>Abnormal Parameters:</strong> ${analysis.abnormalCount}
-              </div>
-              <div class="summary-item">
-                <strong>Critical Parameters:</strong> ${analysis.criticalCount}
-              </div>
-            </div>
-            ${analysis.summary ? `<p style="margin-top: 15px; line-height: 1.6;">${analysis.summary}</p>` : ''}
+            <p>Overall Status: ${analysis.overallStatus.toUpperCase()}</p>
+            <p>Normal: ${analysis.normalCount} | Low: ${analysis.lowCount} | High: ${analysis.highCount}</p>
           </div>
-
           <div class="section">
             <div class="section-title">CBC Parameters Analysis</div>
             <table class="parameters-table">
-              <thead>
-                <tr>
-                  <th>Parameter</th>
-                  <th>Value</th>
-                  <th>Reference Range</th>
-                  <th>Status</th>
-                  <th>Flag</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Parameter</th><th>Value</th><th>Reference Range</th><th>Status</th></tr></thead>
               <tbody>
-                ${Object.entries(analysis.parameters)
-                  .map(([key, param]) => `
-                    <tr>
-                      <td><strong>${param.label || key.toUpperCase()}</strong></td>
-                      <td>${param.value} ${param.unit || ''}</td>
-                      <td>${param.referenceRange.min} - ${param.referenceRange.max} ${param.unit || ''}</td>
-                      <td>
-                        <span class="status-badge status-${param.severity}">
-                          ${param.severity.toUpperCase()}
-                        </span>
-                      </td>
-                      <td><strong>${param.flag}</strong></td>
-                    </tr>
-                  `).join('')}
+                ${Object.entries(analysis.parameters).map(([key, param]) => `
+                  <tr>
+                    <td><strong>${param.referenceRange.displayName || key.toUpperCase()}</strong></td>
+                    <td>${param.value} ${param.referenceRange.unit}</td>
+                    <td>${param.referenceRange.min} - ${param.referenceRange.max}</td>
+                    <td>${param.statusText}</td>
+                  </tr>
+                `).join('')}
               </tbody>
             </table>
           </div>
-
-          ${analysis.detectedConditions && analysis.detectedConditions.length > 0 ? `
-          <div class="section">
-            <div class="section-title">Detected Conditions</div>
-            <ul class="conditions-list">
-              ${analysis.detectedConditions.map(cond => `
-                <li>
-                  <strong>${cond.condition || cond.name || 'Condition'}</strong>
-                  ${cond.severity ? ` - ${cond.severity.toUpperCase()}` : ''}
-                  ${cond.description || cond.message ? `<br><small>${cond.description || cond.message}</small>` : ''}
-                </li>
-              `).join('')}
-            </ul>
-          </div>
-          ` : ''}
-
-          ${openAIResponse ? `
-          <div class="section">
-            <div class="section-title">AI-Powered Recommendations</div>
-            ${openAIResponse.dietary && openAIResponse.dietary.length > 0 ? `
-              <div class="recommendations">
-                <h4>Dietary Recommendations</h4>
-                <ul>
-                ${openAIResponse.dietary.map(rec => `<li>${rec}</li>`).join('')}
-                </ul>
-              </div>
-            ` : ''}
-            ${openAIResponse.lifestyle && openAIResponse.lifestyle.length > 0 ? `
-              <div class="recommendations">
-                <h4>Lifestyle Suggestions</h4>
-                <ul>
-                ${openAIResponse.lifestyle.map(sug => `<li>${sug}</li>`).join('')}
-                </ul>
-              </div>
-            ` : ''}
-            ${openAIResponse.medications && openAIResponse.medications.length > 0 ? `
-              <div class="recommendations">
-                <h4>Possible Medications (Informational Only)</h4>
-                <ul>
-                ${openAIResponse.medications.map(med => `<li>${med}</li>`).join('')}
-                </ul>
-              </div>
-            ` : ''}
-            ${openAIResponse.doctorConsult ? `
-              <div class="recommendations">
-                <h4>When to Consult a Doctor</h4>
-                <p>${openAIResponse.doctorConsult}</p>
-              </div>
-            ` : ''}
-          </div>
-          ` : ''}
-
           <div class="disclaimer">
-            <strong>⚠️ DISCLAIMER:</strong> This analysis is for informational and educational purposes only. 
-            It is NOT a substitute for professional medical advice, diagnosis, or treatment. 
-            Always seek the advice of your physician or other qualified health provider with any questions 
-            you may have regarding a medical condition.
-            ${openAIResponse && openAIResponse.disclaimer ? `<br/><br/>${openAIResponse.disclaimer}` : ''}
-          </div>
-
-          <div class="footer">
-            <p>Health Monitoring Hub - AI-Powered CBC Analysis</p>
-            <p>Report ID: ${reportId || 'N/A'} | Generated: ${currentDate}</p>
+            <strong>⚠️ DISCLAIMER:</strong> This analysis is for informational purposes only. 
+            Always consult with a healthcare professional for medical advice.
           </div>
         </body>
-      </html>
-    `;
+      </html>`;
 
     printWindow.document.write(printHTML);
     printWindow.document.close();
-
-    // Wait for content to load, then trigger print
     setTimeout(() => {
       printWindow.focus();
       printWindow.print();
-      // Close window after printing (optional)
-      // printWindow.close();
     }, 250);
   };
 
+  const handleRegenerateRecommendations = () => {
+    fetchOpenAIRecommendations();
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#fff8f8] to-[#FFE4E1] p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen p-4 md:p-8 relative overflow-hidden" style={{
+      background: 'linear-gradient(180deg, #fff5f5 0%, #ffe0e0 10%, #ffcccc 20%, #ffb3b3 35%, #ff9999 50%, #ff8080 65%, #e06666 80%, #cc4d4d 90%, #b33b3b 100%)',
+      backgroundAttachment: 'fixed'
+    }}>
+      <div className="max-w-7xl mx-auto relative z-10">
         {/* Header */}
         <div className="mb-6 md:mb-8">
-          <button 
-            onClick={onBack}
-            className="flex items-center gap-2 text-[#8B0000] hover:text-[#B22222] mb-4 group transition-colors"
-          >
-            <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform"></i>
-            <span className="font-medium">Back to Dashboard</span>
-          </button>
-          
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-[#8B0000] mb-2">
+              <h1 className="text-3xl md:text-4xl font-bold text-[#2c1212] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
                 CBC Analysis Results
               </h1>
-              <p className="text-gray-600">
+              <p className="text-[#4e2a2a] font-medium">
                 AI-powered analysis of your complete blood count report
-        </p>
-      </div>
+              </p>
+            </div>
 
             <div className="flex gap-3">
               <Button 
                 variant="outline"
                 onClick={handleExportPDF}
-                className="border-[#8B0000] text-[#8B0000] hover:bg-[#FFE4E1]"
+                className="border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 hover:scale-105"
               >
                 <i className="fas fa-download mr-2"></i>
                 Export Report
               </Button>
               <Button 
                 onClick={onUploadNew}
-                className="bg-[#8B0000] hover:bg-[#B22222] text-white"
+                className="bg-gradient-to-r from-[#8B0000] to-[#B22222] hover:from-[#A52A2A] hover:to-[#8B0000] text-white shadow-lg shadow-red-900/50 transition-all duration-300 hover:scale-105"
               >
                 <i className="fas fa-plus mr-2"></i>
                 New Analysis
               </Button>
-        </div>
+            </div>
           </div>
         </div>
 
         {/* Clinical Disclaimer */}
-        <Alert className="mb-6 border-amber-200 bg-amber-50">
-          <i className="fas fa-exclamation-triangle text-amber-600 mt-1"></i>
+        <Alert className="mb-6 border-amber-300 bg-amber-100/90 backdrop-blur-sm shadow-lg">
+          <i className="fas fa-exclamation-triangle text-amber-700 mt-1"></i>
           <AlertDescription className="text-amber-800">
             <strong>Important Disclaimer:</strong> This analysis is for informational purposes only. 
             Always consult with a qualified healthcare professional for medical advice and diagnosis.
@@ -615,25 +664,23 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
         {/* Loading State */}
         {loading && (
           <div className="space-y-4">
-            <div className="skeleton-card" style={{ height: '120px' }}></div>
-            <div className="skeleton-card" style={{ height: '400px' }}></div>
-            <div className="text-center text-gray-600 py-8">
-              <i className="fas fa-spinner fa-spin text-2xl text-[#8B0000] mb-2"></i>
-              <p>Analyzing your CBC values...</p>
+            <div className="text-center text-[#4e2a2a] py-8">
+              <i className="fas fa-spinner fa-spin text-3xl text-[#8B0000] mb-3"></i>
+              <p className="font-medium">Analyzing your CBC values...</p>
             </div>
-              </div>
+          </div>
         )}
 
         {/* Error State */}
         {error && !loading && (
-          <Card className="border-red-200 bg-red-50 shadow-lg mb-6">
+          <Card className="border-red-300 bg-red-100/90 backdrop-blur-sm shadow-lg mb-6">
             <CardContent className="p-6">
               <div className="flex items-center gap-3 text-red-800">
                 <i className="fas fa-exclamation-circle text-xl"></i>
                 <div>
                   <h3 className="font-semibold">Analysis Error</h3>
                   <p>{error}</p>
-              </div>
+                </div>
               </div>
               <Button 
                 onClick={handleAnalyze}
@@ -650,65 +697,60 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
         {analysis && !loading && (
           <div className="space-y-6">
             {/* Overall Summary */}
-            <Card className="shadow-lg border-2 border-[#8B0000]/10">
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-3">
                   <div>
-                    <CardTitle className="flex items-center gap-2 text-[#8B0000]">
-                      <i className="fas fa-chart-line"></i>
+                    <CardTitle className="flex items-center gap-2 text-[#2c1212]">
+                      <i className="fas fa-chart-line text-[#8B0000]"></i>
                       Overall Assessment
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-[#4e2a2a]">
                       Summary of your CBC analysis results
                     </CardDescription>
-              </div>
-                  <div className={`px-4 py-2 rounded-full font-semibold ${getSeverityColor(analysis.overallSeverity)}`}>
-                    <i className={`${getSeverityIcon(analysis.overallSeverity)} mr-2`}></i>
-                    {analysis.overallSeverity.toUpperCase()}
-            </div>
-          </div>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="text-center p-4 bg-green-100 rounded-xl border border-green-200 shadow-sm">
                     <div className="text-2xl font-bold text-green-700">{analysis.normalCount}</div>
-                    <div className="text-sm text-gray-600">Normal</div>
+                    <div className="text-sm text-gray-700 font-medium">Normal</div>
                   </div>
-                  <div className="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <div className="text-2xl font-bold text-yellow-700">{analysis.abnormalCount}</div>
-                    <div className="text-sm text-gray-600">Abnormal</div>
+                  <div className="text-center p-4 bg-orange-100 rounded-xl border border-orange-200 shadow-sm">
+                    <div className="text-2xl font-bold text-orange-700">{analysis.lowCount}</div>
+                    <div className="text-sm text-gray-700 font-medium">Low</div>
                   </div>
-                  <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
-                    <div className="text-2xl font-bold text-red-700">{analysis.criticalCount}</div>
-                    <div className="text-sm text-gray-600">Critical</div>
+                  <div className="text-center p-4 bg-yellow-100 rounded-xl border border-yellow-200 shadow-sm">
+                    <div className="text-2xl font-bold text-yellow-700">{analysis.highCount}</div>
+                    <div className="text-sm text-gray-700 font-medium">High</div>
                   </div>
-                  <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <div className="text-2xl font-bold text-blue-700">{Object.keys(analysis.parameters).length}</div>
-                    <div className="text-sm text-gray-600">Total Parameters</div>
+                  <div className="text-center p-4 bg-blue-100 rounded-xl border border-blue-200 shadow-sm">
+                    <div className="text-2xl font-bold text-blue-700">{analysis.totalCount}</div>
+                    <div className="text-sm text-gray-700 font-medium">Total Parameters</div>
                   </div>
                 </div>
-                
                 {analysis.detectedConditions.length > 0 && (
                   <div className="mt-4">
-                    <h4 className="font-semibold text-gray-900 mb-2">⚠️ Detected Conditions</h4>
+                    <h4 className="font-semibold text-[#2c1212] mb-2">⚠️ Detected Conditions</h4>
                     <div className="space-y-2">
                       {analysis.detectedConditions.map((condition, index) => (
                         <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <div className="flex justify-between items-center mb-1">
+                          <div className="flex justify-between items-center mb-1">
                             <span className="font-semibold text-red-800">{condition.name}</span>
                           </div>
                           <p className="text-sm text-red-700">{condition.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* ML Diagnosis (model output from Python service) */}
+            {/* ML Diagnosis */}
             {mlResult && (
-              <Card className="shadow-lg border border-indigo-200">
+              <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
@@ -716,288 +758,277 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
                         <i className="fas fa-brain"></i>
                         ML Diagnosis
                       </CardTitle>
-                      <CardDescription>
-                        Output from trained CBC model (severity and top predictions)
+                      <CardDescription className="text-[#4e2a2a]">
+                        Output from trained CBC model
                       </CardDescription>
                     </div>
-                    <div className="px-3 py-1 rounded-full text-sm font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                    <div className="px-3 py-1 rounded-full text-sm font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
                       {mlResult.severity ? mlResult.severity.toUpperCase() : 'N/A'}
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {analysisWarnings.length > 0 && (
-                    <Alert className="mb-4 border-amber-200 bg-amber-50">
-                      <AlertDescription>
-                        {analysisWarnings.join(' ')}
-                      </AlertDescription>
-                    </Alert>
-                  )}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="p-4 rounded-lg bg-indigo-50 border border-indigo-200">
+                    <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200">
                       <h4 className="font-semibold text-indigo-800 mb-1">Model Severity</h4>
                       <p className="text-2xl font-bold text-indigo-900">
                         {mlResult.severity ? mlResult.severity.toUpperCase() : 'N/A'}
                       </p>
                     </div>
-                    <div className="p-4 rounded-lg bg-indigo-50 border border-indigo-200">
-                      <h4 className="font-semibold text-indigo-800 mb-1">Model Used</h4>
-                      <p className="text-sm font-medium text-indigo-900 break-all">
-                        {mlResult.usedModel || 'N/A'}
-                      </p>
-                    </div>
-                    <div className="p-4 rounded-lg bg-indigo-50 border border-indigo-200">
+                    <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200">
                       <h4 className="font-semibold text-indigo-800 mb-1">Confidence</h4>
                       <p className="text-2xl font-bold text-indigo-900">
                         {mlResult.confidence != null ? (mlResult.confidence * 100).toFixed(1) + '%' : 'N/A'}
                       </p>
                     </div>
-                  </div>
-                  <div className="mt-4 p-4 rounded-lg bg-white border border-gray-200">
-                      <h4 className="font-semibold text-gray-900 mb-2">Top Model Predictions</h4>
+                    <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200">
+                      <h4 className="font-semibold text-indigo-800 mb-1">Top Predictions</h4>
                       {mlResult.predictions && Object.keys(mlResult.predictions).length > 0 ? (
-                        <ul className="space-y-1">
+                        <ul className="mt-2 space-y-1">
                           {Object.entries(mlResult.predictions)
                             .sort((a, b) => b[1] - a[1])
                             .slice(0, 3)
-                            .map(([label, prob], idx) => (
+                            .map(([label, prob]) => (
                               <li key={label} className="flex items-center justify-between text-sm">
-                                <span className="text-gray-800">
-                                  {idx + 1}. {label}
-                                </span>
-                                <span className="font-semibold text-indigo-700">
+                                <span className="text-indigo-900">{label}</span>
+                                <span className="font-semibold text-indigo-800">
                                   {(prob * 100).toFixed(1)}%
                                 </span>
                               </li>
                             ))}
                         </ul>
                       ) : (
-                        <p className="text-sm text-gray-600">
-                          No prediction breakdown available for this analysis.
-                        </p>
+                        <p className="text-sm text-indigo-900 mt-2">N/A</p>
                       )}
                     </div>
+                  </div>
                 </CardContent>
               </Card>
             )}
 
-            {/* Parameter Details */}
-            <Card className="shadow-lg">
+            {/* Parameter Details with improved bar */}
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                   <i className="fas fa-microscope text-[#8B0000]"></i>
                   Parameter Details
                 </CardTitle>
-                <CardDescription>
-                  Detailed breakdown of each CBC parameter
+                <CardDescription className="text-[#4e2a2a]">
+                  Detailed breakdown of each CBC parameter with severity categories
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {Object.entries(analysis.parameters).map(([key, param]) => {
-                    const range = param.referenceRange || {};
-                    const min = range.min ?? 0;
-                    const max = range.max ?? 0;
-                    const val = parseFloat(param.value) || 0;
-                    const span = max - min || 1;
-                    const raw = ((val - min) / span) * 100;
-                    const clampedWidth = Math.max(0, Math.min(100, raw));
-                
-                return (
-                      <div 
-                        key={key} 
-                        className={`p-4 rounded-lg border ${
-                          param.severity === 'critical' ? 'border-red-300 bg-red-50' :
-                          param.severity === 'abnormal' || param.severity === 'mild' ? 'border-yellow-300 bg-yellow-50' :
-                          'border-green-300 bg-green-50'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-semibold text-gray-900 capitalize">{key}</span>
-                          <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                            param.flag === 'CRITICAL' ? 'bg-red-100 text-red-800' :
-                            param.flag === 'HIGH' || param.flag === 'LOW' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
-                        {param.flag}
-                          </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {STANDARD_CBC_PARAMS.map((key) => {
+                    const param = analysis.parameters[key];
+                    if (!param) return null;
+                    const range = param.referenceRange;
+                    const displayName = range.displayName || key.charAt(0).toUpperCase() + key.slice(1);
+                    const statusColor = param.statusCategory === 'missing'
+                      ? '#6b7280'
+                      : getCategoryColor(param.category);
+                    
+                    return (
+                      <div key={key} className="p-5 rounded-xl bg-white border-2 border-gray-100 hover:border-[#8B0000]/30 transition-all duration-300 shadow-sm hover:shadow-md">
+                        <div className="flex justify-between items-center mb-3">
+                          <div>
+                            <span className="font-bold text-gray-800 text-lg">{displayName}</span>
+                            {range.note && (
+                              <span className="ml-2 text-xs text-gray-500">({range.note})</span>
+                            )}
+                          </div>
                         </div>
                         
-                        <div className="text-center my-3">
-                          <div className="text-2xl font-bold text-gray-900">{param.value}</div>
-                          <div className="text-sm text-gray-600">{param.referenceRange.unit}</div>
-                      </div>
-                      
-                        <div className="text-xs text-gray-600 mb-2">
-                          Normal range: {param.referenceRange.min} - {param.referenceRange.max} {param.referenceRange.unit}
+                        <div className="text-center mb-4">
+                          <div className="text-3xl font-bold" style={{ color: statusColor }}>
+                            {param.value === null ? '—' : param.value}
+                          </div>
+                          <div className="text-sm text-gray-600">{range.unit}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            Reference: {range.min} - {range.max} {range.unit}
+                          </div>
                         </div>
                         
-                        <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                        {/* Gradient bar with marker on top */}
+                        <div className="relative mb-2">
                           <div 
-                            className={`h-2 rounded-full ${
-                              param.severity === 'critical' ? 'bg-red-500' :
-                              param.severity === 'abnormal' ? 'bg-yellow-500' :
-                              'bg-green-500'
-                            }`}
-                            style={{ width: `${clampedWidth}%` }}
-                          ></div>
+                            className="w-full h-3 rounded-full overflow-hidden shadow-inner"
+                            style={{ background: getCategoryGradient() }}
+                          >
+                          </div>
+                          {/* Marker dot positioned ON the bar */}
+                          <div 
+                            className="absolute w-5 h-5 bg-white border-3 border-gray-800 rounded-full shadow-lg transform -translate-x-2.5 -translate-y-1"
+                            style={{ 
+                              left: `${param.barPosition}%`,
+                              top: '-4px',
+                              border: param.statusCategory === 'missing' ? '3px solid #6b7280' : '3px solid #1f2937',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                            }}
+                          >
+                            <div
+                              className="absolute inset-0 rounded-full m-0.5"
+                              style={{ backgroundColor: param.statusCategory === 'missing' ? '#6b7280' : '#1f2937' }}
+                            ></div>
+                          </div>
                         </div>
                         
-                        <p className="text-sm text-gray-700 mt-2">{param.message}</p>
-                  </div>
-                );
-              })}
-            </div>
+                        {/* Labels under the bar */}
+                        <div className="flex justify-between text-xs font-medium mt-2 px-1">
+                          <span style={{ color: '#991b1b' }}>Very Low</span>
+                          <span style={{ color: '#f97316' }}>Mild Low</span>
+                          <span style={{ color: '#22c55e' }}>Normal</span>
+                          <span style={{ color: '#eab308' }}>Mild High</span>
+                          <span style={{ color: '#dc2626' }}>Very High</span>
+                        </div>
+                        
+                        <p className="text-sm text-gray-700 mt-4 pt-3 border-t border-gray-100">{param.message}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </CardContent>
             </Card>
 
             {/* AI Recommendations Section */}
-            <Card className="shadow-lg border-2 border-[#8B0000]/20">
-              <CardHeader className="bg-gradient-to-r from-[#fff8f8] to-white">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2 text-[#8B0000]">
-                      <i className="fas fa-robot"></i>
-                      AI-Powered Recommendations
-                    </CardTitle>
-                    <CardDescription>
-                      Personalized suggestions based on your CBC results
-                    </CardDescription>
+            <div ref={recommendationsRef}>
+              <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
+                <CardHeader className="bg-gradient-to-r from-[#fff8f8] to-white">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-[#2c1212]">
+                        <i className="fas fa-robot text-[#8B0000]"></i>
+                        AI-Powered Recommendations
+                      </CardTitle>
+                      <CardDescription className="text-[#4e2a2a]">
+                        Personalized suggestions based on your CBC results
+                      </CardDescription>
                     </div>
-                  <div className="px-3 py-1 bg-[#FFE4E1] text-[#8B0000] rounded-full text-sm font-semibold">
-                    OpenAI Powered
+                    <div className="px-3 py-1 bg-[#FFE4E1] text-[#8B0000] rounded-full text-sm font-semibold shadow-sm">
+                      AI Generated
+                    </div>
                   </div>
-              </div>
-              </CardHeader>
-              
-              <CardContent className="p-6">
-                {/* Loading State for OpenAI */}
-                {openAILoading && (
-                  <div className="text-center py-8">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#8B0000] mb-3"></div>
-                    <p className="text-gray-600">Generating personalized recommendations...</p>
-                </div>
-              )}
+                </CardHeader>
+                
+                <CardContent className="p-6">
+                  {openAILoading && (
+                    <div className="text-center py-8">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[#8B0000] mb-3"></div>
+                      <p className="text-[#4e2a2a]">Generating personalized recommendations...</p>
+                    </div>
+                  )}
 
-                {/* OpenAI Response */}
-                {openAIResponse && !openAILoading && (
-                  <div className="space-y-6">
-                    {/* Dietary Recommendations */}
-                    <div className="bg-green-50 border border-green-200 rounded-xl p-5">
-                      <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
-                        <i className="fas fa-apple-alt"></i>
-                        Dietary Recommendations
-                      </h4>
-                      <ul className="space-y-2">
-                        {openAIResponse.dietary.map((rec, index) => (
-                          <li key={index} className="flex items-start gap-2">
-                            <i className="fas fa-check text-green-600 mt-1"></i>
-                            <span className="text-gray-700">{rec}</span>
-                          </li>
-                    ))}
-                  </ul>
-                </div>
+                  {openAIResponse && !openAILoading && (
+                    <div className="space-y-6">
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-5 shadow-sm">
+                        <h4 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                          <i className="fas fa-apple-alt"></i>
+                          Dietary Recommendations
+                        </h4>
+                        <ul className="space-y-2">
+                          {openAIResponse.dietary.map((rec, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <i className="fas fa-check text-green-600 mt-1"></i>
+                              <span className="text-gray-700">{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
 
-                    {/* Lifestyle Suggestions */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
-                      <h4 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
-                        <i className="fas fa-running"></i>
-                        Lifestyle Suggestions
-                      </h4>
-                      <ul className="space-y-2">
-                        {openAIResponse.lifestyle.map((suggestion, index) => (
-                          <li key={index} className="flex items-start gap-2">
-                            <i className="fas fa-check text-blue-600 mt-1"></i>
-                            <span className="text-gray-700">{suggestion}</span>
-                          </li>
-                        ))}
-                </ul>
-              </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 shadow-sm">
+                        <h4 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                          <i className="fas fa-running"></i>
+                          Lifestyle Suggestions
+                        </h4>
+                        <ul className="space-y-2">
+                          {openAIResponse.lifestyle.map((suggestion, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <i className="fas fa-check text-blue-600 mt-1"></i>
+                              <span className="text-gray-700">{suggestion}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
 
-                {/* Medicines (Informational Only) */}
-                {openAIResponse.medications && openAIResponse.medications.length > 0 && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-5">
-                    <h4 className="font-semibold text-purple-800 mb-3 flex items-center gap-2">
-                      <i className="fas fa-pills"></i>
-                      Medicines (Informational Only)
-                    </h4>
-                    <ul className="space-y-2">
-                      {openAIResponse.medications.map((med, index) => (
-                        <li key={index} className="flex items-start gap-2">
-                          <i className="fas fa-check text-purple-600 mt-1"></i>
-                          <span className="text-gray-700">{med}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-xs text-purple-700 mt-2">
-                      Always consult a qualified clinician before starting or stopping any medication.
-                    </p>
-                  </div>
-                )}
+                      {openAIResponse.medications && openAIResponse.medications.length > 0 && (
+                        <div className="bg-purple-50 border border-purple-200 rounded-xl p-5 shadow-sm">
+                          <h4 className="font-semibold text-purple-800 mb-3 flex items-center gap-2">
+                            <i className="fas fa-pills"></i>
+                            Possible Medications (Informational Only)
+                          </h4>
+                          <ul className="space-y-2">
+                            {openAIResponse.medications.map((med, index) => (
+                              <li key={index} className="flex items-start gap-2">
+                                <i className="fas fa-check text-purple-600 mt-1"></i>
+                                <span className="text-gray-700">{med}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="text-xs text-purple-700 mt-2">
+                            Always consult a qualified clinician before starting or stopping any medication.
+                          </p>
+                        </div>
+                      )}
 
-                    {/* When to Consult Doctor */}
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-                      <h4 className="font-semibold text-amber-800 mb-3 flex items-center gap-2">
-                        <i className="fas fa-user-md"></i>
-                        When to Consult a Doctor
-                      </h4>
-                      <p className="text-gray-700">{openAIResponse.doctorConsult}</p>
-                </div>
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 shadow-sm">
+                        <h4 className="font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                          <i className="fas fa-user-md"></i>
+                          When to Consult a Doctor
+                        </h4>
+                        <p className="text-gray-700">{openAIResponse.doctorConsult}</p>
+                      </div>
 
-                    {/* Disclaimer */}
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-5">
-                      <h4 className="font-semibold text-red-800 mb-3 flex items-center gap-2">
-                        <i className="fas fa-exclamation-triangle"></i>
-                        Important Medical Disclaimer
-                      </h4>
-                      <p className="text-red-700">{openAIResponse.disclaimer}</p>
-              </div>
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-5 shadow-sm">
+                        <h4 className="font-semibold text-red-800 mb-3 flex items-center gap-2">
+                          <i className="fas fa-exclamation-triangle"></i>
+                          Important Medical Disclaimer
+                        </h4>
+                        <p className="text-red-700">{openAIResponse.disclaimer}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {openAIResponse && !openAILoading && (
+                    <div className="mt-6 text-center">
+                      <Button 
+                        variant="outline"
+                        onClick={handleRegenerateRecommendations}
+                        className="border-[#8B0000] text-[#8B0000] hover:bg-[#FFE4E1] transition-all duration-300 hover:scale-105"
+                      >
+                        <i className="fas fa-sync-alt mr-2"></i>
+                        Regenerate Recommendations
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-          )}
-
-                {/* Regenerate Button */}
-                {openAIResponse && !openAILoading && (
-                  <div className="mt-6 text-center">
-                    <Button 
-                      variant="outline"
-                      onClick={() => fetchOpenAIRecommendations(analysis)}
-                      className="border-[#8B0000] text-[#8B0000] hover:bg-[#FFE4E1]"
-                    >
-                      <i className="fas fa-sync-alt mr-2"></i>
-                      Regenerate Recommendations
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
             {/* Next Steps */}
-            <Card className="shadow-lg">
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                   <i className="fas fa-calendar-check text-[#8B0000]"></i>
                   Next Steps & Follow-up
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-gradient-to-br from-blue-50 to-white rounded-xl border border-blue-200">
+                  <div className="p-4 bg-gradient-to-br from-blue-50 to-white rounded-xl border border-blue-200 shadow-sm">
                     <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
                       <i className="fas fa-clock"></i>
                       Recommended Follow-up
                     </h4>
                     <p className="text-gray-700">
-                      Based on your {analysis.overallSeverity} results, 
-                      {analysis.overallSeverity === 'critical' 
-                        ? ' consult a healthcare professional immediately.' 
-                        : analysis.overallSeverity === 'abnormal'
-                        ? ' schedule a doctor appointment within 2 weeks.'
+                      Based on your {analysis.overallStatus} results, 
+                      {analysis.overallStatus === 'low' || analysis.overallStatus === 'high'
+                        ? ' schedule a doctor appointment within 2 weeks for further evaluation.'
                         : ' routine follow-up in 6-12 months is recommended.'
                       }
                     </p>
                   </div>
                   
-                  <div className="p-4 bg-gradient-to-br from-green-50 to-white rounded-xl border border-green-200">
+                  <div className="p-4 bg-gradient-to-br from-green-50 to-white rounded-xl border border-green-200 shadow-sm">
                     <h4 className="font-semibold text-green-800 mb-2 flex items-center gap-2">
                       <i className="fas fa-file-medical"></i>
                       Keep This Report
@@ -1010,47 +1041,9 @@ const ResultsDisplay = ({ reportId, cbcData, onBack, onUploadNew }) => {
                 </div>
               </CardContent>
             </Card>
-        </div>
-      )}
-
-        {/* Raw Data Display (if no analysis yet) */}
-        {!analysis && !loading && cbcData && (
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <i className="fas fa-list text-[#8B0000]"></i>
-                Extracted CBC Values
-              </CardTitle>
-              <CardDescription>
-                Values extracted from your uploaded report
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {Object.entries(cbcData).map(([key, value]) => (
-                  <div key={key} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="font-semibold text-gray-900 capitalize mb-1">{key}</div>
-                    <div className="text-xl font-bold text-[#8B0000]">{value}</div>
-                    <div className="text-xs text-gray-600 mt-1">
-                      {referenceRanges[key]?.unit || 'units'}
-                </div>
-              </div>
-            ))}
           </div>
-              
-              <div className="mt-6 text-center">
-                <Button 
-                  onClick={handleAnalyze}
-                  className="bg-[#8B0000] hover:bg-[#B22222] text-white shadow-lg"
-                >
-                  <i className="fas fa-brain mr-2"></i>
-                  Analyze with AI
-                </Button>
-            </div>
-            </CardContent>
-          </Card>
         )}
-        </div>
+      </div>
     </div>
   );
 };

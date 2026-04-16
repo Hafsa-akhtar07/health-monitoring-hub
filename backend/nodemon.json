@@ -1,0 +1,19 @@
+{
+  "watch": [
+    "server.js",
+    "routes",
+    "services",
+    "middleware",
+    "config",
+    "database"
+  ],
+  "ext": "js,json",
+  "ignore": [
+    "ocr-code/json_results/**",
+    "ocr-code/raw_data/**",
+    "ocr-service/.ocr-code/json_results/**",
+    "ocr-service/.ocr-code/raw_data/**",
+    "../uploads/**",
+    "../logs/**"
+  ]
+}
