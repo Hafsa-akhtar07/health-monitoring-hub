@@ -48,9 +48,8 @@ ml-service/.venv.venv/
 fyp_material/
 *.csv
 
-# Large ML model binaries (>50MB - use locally, obtain separately)
-Model/model_1_core_cbc.pkl
-Model/model_2_cbc_diff.pkl
+# ML model artifacts in Model/ (large binaries + encoders — keep local or distribute separately)
+Model/*.pkl
 
 # Python cache
 __pycache__/
