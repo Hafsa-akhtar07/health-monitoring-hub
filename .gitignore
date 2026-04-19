@@ -50,6 +50,8 @@ fyp_material/
 
 # ML model artifacts in Model/ (large binaries + encoders — keep local or distribute separately)
 Model/*.pkl
+# Archived models (~128MB+); not the same as Model/*.pkl paths
+Model.zip
 
 # Python cache
 __pycache__/
