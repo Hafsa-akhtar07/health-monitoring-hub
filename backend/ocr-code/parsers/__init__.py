@@ -1,36 +1,32 @@
 """
-Medical report parsers for different laboratory formats.
+Medical report parsing — CBC-only path for API use.
+
+All uploads are parsed with a single format-agnostic CBC extractor (see
+cbc_core_extractor.py). Legacy per-lab parsers remain in the package for
+reference but are not used by the OCR service.
 """
 
-from .parth_parser import parse_parth_format
-from .grant_parser import parse_grant_format
-from .arfa_parser import parse_arfa_format
-from .universal_parser import parse_universal_format
+from .cbc_core_extractor import extract_cbc_core_fields
 
 
-def detect_report_format(texts):
+def parse_medical_report(
+    rec_texts,
+    all_text=None,
+    *,
+    rec_texts_scan_order=None,
+    verbose: bool = True,
+):
     """
-    Detect the format of the medical report based on keywords.
-    Returns: 'parth', 'grant', 'arfa', or 'unknown'
-    """
-    if not texts:
-        return 'unknown'
-    
-    text_str = " ".join(texts[:50]).upper()  # Check first 50 items
-    
-    if "PARTH PATHOLOGY" in text_str or "PARTH" in text_str:
-        return 'parth'
-    elif "GRANT MEDICAL" in text_str or "GRANT" in text_str:
-        return 'grant'
-    elif "ARFA DIAGNOSTIC" in text_str or "ARFA" in text_str:
-        return 'arfa'
-    return 'unknown'
+    Parse OCR output and return structured haematology_report rows for the
+    14 standard CBC parameters.
 
+    Args:
+        rec_texts: List of OCR line strings (geometry reading order).
+        all_text: Optional full concatenated text (improves full-document regex).
+        rec_texts_scan_order: Optional detector-native order (before geometry sort).
 
-def parse_medical_report(rec_texts):
-    """
-    Parse medical report from OCR text and extract structured fields.
-    Supports multiple report formats: PARTH, Grant Medical, ARFA, and any other format via universal parser.
+    Returns:
+        Dict with haematology_report[], plus empty sections for API compatibility.
     """
     if not rec_texts:
         return {
@@ -40,47 +36,17 @@ def parse_medical_report(rec_texts):
             "blood_indices": [],
             "morphology": {},
             "footer_info": {},
-            "other_fields": {}
+            "other_fields": {},
         }
-    
-    # Convert to list of strings for easier processing
+
     texts = [str(t).strip() for t in rec_texts if t and str(t).strip()]
-    
-    # Detect format
-    format_type = detect_report_format(texts)
-    
-    # Route to appropriate parser
-    # For known formats, try specific parser first, then fallback to universal
-    if format_type == 'parth':
-        try:
-            result = parse_parth_format(texts)
-            # Validate that we got some data
-            if result.get('haematology_report') or result.get('blood_indices') or result.get('patient_info'):
-                return result
-        except Exception:
-            pass
-        # Fallback to universal parser
-        return parse_universal_format(texts)
-    elif format_type == 'grant':
-        try:
-            result = parse_grant_format(texts)
-            # Validate that we got some data
-            if result.get('haematology_report') or result.get('blood_indices') or result.get('patient_info'):
-                return result
-        except Exception:
-            pass
-        # Fallback to universal parser
-        return parse_universal_format(texts)
-    elif format_type == 'arfa':
-        try:
-            result = parse_arfa_format(texts)
-            # Validate that we got some data
-            if result.get('haematology_report') or result.get('blood_indices') or result.get('patient_info'):
-                return result
-        except Exception:
-            pass
-        # Fallback to universal parser
-        return parse_universal_format(texts)
-    else:
-        # Use universal parser for unknown formats or as fallback
-        return parse_universal_format(texts)
+    blob = all_text if all_text else None
+    scan = None
+    if rec_texts_scan_order:
+        scan = [str(t).strip() for t in rec_texts_scan_order if t and str(t).strip()]
+    return extract_cbc_core_fields(
+        texts,
+        all_text=blob,
+        rec_texts_scan_order=scan,
+        verbose=verbose,
+    )

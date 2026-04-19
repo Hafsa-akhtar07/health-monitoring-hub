@@ -12,6 +12,8 @@ import { authAPI } from './utils/api';
 import { authStorage } from './utils/authStorage';
 import { createSocket } from './utils/socket';
 
+const REPORT_DATA_STORAGE_KEY = 'hmh_last_report_data';
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentView, setCurrentView] = useState('landing');
@@ -23,59 +25,190 @@ function App() {
   const [uploadState, setUploadState] = useState(null);
   const [realtimeToast, setRealtimeToast] = useState(null);
   const socketRef = useRef(null);
+  const isAdmin = user?.role === 'admin';
 
+  const saveReportData = (data) => {
+    setReportData(data);
+    try {
+      if (data) {
+        sessionStorage.setItem(REPORT_DATA_STORAGE_KEY, JSON.stringify(data));
+      } else {
+        sessionStorage.removeItem(REPORT_DATA_STORAGE_KEY);
+      }
+    } catch (e) {
+      console.warn('Unable to persist report data:', e);
+    }
+  };
+
+  const loadReportData = () => {
+    try {
+      const raw = sessionStorage.getItem(REPORT_DATA_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.cbcData) return null;
+      return parsed;
+    } catch (e) {
+      console.warn('Unable to restore report data:', e);
+      return null;
+    }
+  };
+
+  // Helper function to get view from URL
+  const getViewFromUrl = () => {
+    const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
+    
+    // Check if we have a view parameter first
+    if (viewParam) {
+      return viewParam;
+    }
+    
+    // Map paths to views
+    if (path === '/') return 'landing';
+    if (path === '/login') return 'login';
+    if (path === '/signup') return 'signup';
+    if (path === '/dashboard') return 'dashboard';
+    if (path === '/upload') return 'upload';
+    if (path === '/manual-entry') return 'manual';
+    if (path === '/results') return 'results';
+    if (path === '/history') return 'history';
+    if (path === '/admin') return 'admin-dashboard';
+    
+    return 'landing';
+  };
+
+  // Helper function to update URL based on view
+  const updateUrl = (view, replace = false) => {
+    let path = '/';
+    let search = '';
+    
+    switch(view) {
+      case 'landing':
+        path = '/';
+        break;
+      case 'login':
+        path = '/login';
+        break;
+      case 'signup':
+        path = '/signup';
+        break;
+      case 'dashboard':
+        path = '/dashboard';
+        break;
+      case 'upload':
+        path = '/upload';
+        break;
+      case 'manual':
+        path = '/manual-entry';
+        break;
+      case 'results':
+        path = '/results';
+        break;
+      case 'history':
+        path = '/history';
+        break;
+      case 'admin-dashboard':
+        path = '/admin';
+        break;
+      default:
+        path = '/';
+    }
+    
+    if (replace) {
+      window.history.replaceState({ view }, '', path + search);
+    } else {
+      window.history.pushState({ view }, '', path + search);
+    }
+  };
+
+  // Handle browser back/forward buttons
   useEffect(() => {
-    // Check if this tab has a valid token (sessionStorage = per-tab session)
+    const handlePopState = (event) => {
+      const view = getViewFromUrl();
+      
+      // Update state based on URL
+      if (!isAuthenticated) {
+        if (view === 'landing') setCurrentView('landing');
+        else if (view === 'login') setCurrentView('login');
+        else if (view === 'signup') setCurrentView('signup');
+        else {
+          setCurrentView('landing');
+          updateUrl('landing', true);
+        }
+      } else {
+        const validViews = ['dashboard', 'upload', 'manual', 'results', 'history', 'admin-dashboard'];
+        if (validViews.includes(view)) {
+          setCurrentView(view);
+        } else {
+          const defaultView = user?.role === 'admin' ? 'admin-dashboard' : 'dashboard';
+          setCurrentView(defaultView);
+          updateUrl(defaultView, true);
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isAuthenticated, user]);
+
+  // Initialize app based on URL on load
+  useEffect(() => {
     const token = authStorage.getToken();
     const savedUser = authStorage.getUser();
+    const urlView = getViewFromUrl();
 
     if (token && savedUser) {
-      try {
-        authAPI.getCurrentUser()
-          .then((response) => {
-            if (response && response.success && response.user) {
-              const currentUserId = user?.id;
-              const newUserId = response.user.id;
-              if (currentUserId && currentUserId !== newUserId) {
-                setReportData(null);
-                setUploadState(null);
-                setPreviousViewBeforeResults(null);
-              }
-              setUser(response.user);
-              setIsAuthenticated(true);
-              const role = response.user.role;
-              setCurrentView(role === 'admin' ? 'admin-dashboard' : 'dashboard');
-              authStorage.setUser(response.user);
+      authAPI.getCurrentUser()
+        .then((response) => {
+          if (response && response.success && response.user) {
+            setUser(response.user);
+            setIsAuthenticated(true);
+            authStorage.setUser(response.user);
+            
+            // Determine where to go based on URL or role
+            let targetView;
+            if (urlView !== 'landing' && urlView !== 'login' && urlView !== 'signup') {
+              // If URL has a valid view, use it
+              targetView = urlView;
             } else {
-              authStorage.clear();
-              setReportData(null);
-              setUploadState(null);
-              setPreviousViewBeforeResults(null);
+              // Otherwise go to dashboard
+              targetView = response.user.role === 'admin' ? 'admin-dashboard' : 'dashboard';
             }
-          })
-          .catch((error) => {
-            console.error('Token verification failed:', error);
-            authStorage.clear();
-            setReportData(null);
-            setUploadState(null);
-            setPreviousViewBeforeResults(null);
-          });
-      } catch (error) {
-        console.error('Error checking authentication:', error);
-        authStorage.clear();
-        setReportData(null);
-        setUploadState(null);
-        setPreviousViewBeforeResults(null);
-      }
+            
+            setCurrentView(targetView);
+            updateUrl(targetView, true);
+
+            const restoredReport = loadReportData();
+            if (restoredReport) {
+              setReportData(restoredReport);
+            }
+          } else {
+            // Invalid token, go to landing
+            setCurrentView('landing');
+            updateUrl('landing', true);
+          }
+        })
+        .catch((error) => {
+          console.error('Token verification failed:', error);
+          authStorage.clear();
+          setCurrentView('landing');
+          updateUrl('landing', true);
+        });
     } else {
-      authStorage.clear();
-      setReportData(null);
-      setUploadState(null);
-      setPreviousViewBeforeResults(null);
+      // No token, show landing or login based on URL
+      if (urlView === 'login') {
+        setCurrentView('login');
+      } else if (urlView === 'signup') {
+        setCurrentView('signup');
+      } else {
+        setCurrentView('landing');
+        updateUrl('landing', true);
+      }
     }
   }, []);
 
-  // Socket.IO real-time updates (connect when authenticated, disconnect on logout)
+  // Socket.IO real-time updates
   useEffect(() => {
     if (!isAuthenticated) {
       if (socketRef.current) {
@@ -124,28 +257,25 @@ function App() {
   }, [realtimeToast]);
 
   const handleLogin = (userData) => {
-    // Token is already stored in sessionStorage by Login component (this tab only)
-    // Clear any previous user's data when new user logs in
-    setReportData(null);
+    saveReportData(null);
     setUploadState(null);
     setPreviousViewBeforeResults(null);
     setUser(userData);
     setIsAuthenticated(true);
-    // Admins should see a dedicated admin dashboard, patients see the standard dashboard
-    setCurrentView(userData?.role === 'admin' ? 'admin-dashboard' : 'dashboard');
+    const targetView = userData?.role === 'admin' ? 'admin-dashboard' : 'dashboard';
+    setCurrentView(targetView);
     setAuthView('login');
+    updateUrl(targetView);
   };
 
   const handleSignup = (userData) => {
-    // Token is already stored in sessionStorage by Signup component
-    // Clear any previous user's data when new user signs up
-    setReportData(null);
+    saveReportData(null);
     setUploadState(null);
     setPreviousViewBeforeResults(null);
     setUser(userData);
     setIsAuthenticated(true);
-    // Newly signed-up users are patients by default
     setCurrentView('dashboard');
+    updateUrl('dashboard');
   };
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -158,12 +288,13 @@ function App() {
     setShowLogoutConfirm(false);
     setUser(null);
     setIsAuthenticated(false);
-    setReportData(null);
+    saveReportData(null);
     setUploadState(null);
     setPreviousViewBeforeResults(null);
     authStorage.clear();
     setCurrentView('landing');
     setAuthView('login');
+    updateUrl('landing');
   };
 
   const cancelLogout = () => {
@@ -171,16 +302,14 @@ function App() {
   };
 
   const handleGetStarted = () => {
-    // Always show login page when clicking "Start Free Trial"
-    // Don't auto-login - let user explicitly login
     setAuthView('login');
     setCurrentView('login');
+    updateUrl('login');
   };
 
   const handleUploadSuccess = (data) => {
     try {
       console.log('Upload successful - received data:', data);
-      console.log('Extracted CBC Data:', data.extractedData);
       
       if (!data || !data.extractedData) {
         console.error('No extracted data received!', data);
@@ -191,16 +320,17 @@ function App() {
       const reportDataToSet = {
         reportId: data.reportId || Date.now().toString(),
         cbcData: data.extractedData,
-        filename: data.filename || 'uploaded_file'
+        filename: data.filename || 'uploaded_file',
+        gender: data.gender || null
       };
       
       console.log('Setting report data:', reportDataToSet);
-      setReportData(reportDataToSet);
+      saveReportData(reportDataToSet);
       
-      // Remember where we came from so Back can return there
       setPreviousViewBeforeResults(currentView);
       setTimeout(() => {
         setCurrentView('results');
+        updateUrl('results');
       }, 100);
     } catch (error) {
       console.error('Error in handleUploadSuccess:', error);
@@ -220,16 +350,17 @@ function App() {
       
       const reportDataToSet = {
         reportId: data.reportId || Date.now().toString(),
-        cbcData: data.cbcData
+        cbcData: data.cbcData,
+        gender: data.gender || null
       };
       
       console.log('Setting report data:', reportDataToSet);
-      setReportData(reportDataToSet);
+      saveReportData(reportDataToSet);
       
-      // Remember where we came from so Back can return there
       setPreviousViewBeforeResults(currentView);
       setTimeout(() => {
         setCurrentView('results');
+        updateUrl('results');
       }, 100);
     } catch (error) {
       console.error('Error in handleManualSubmit:', error);
@@ -238,11 +369,12 @@ function App() {
   };
 
   const handleBack = () => {
-    // Return to where user came from (upload or manual), keep data
     if (previousViewBeforeResults) {
       setCurrentView(previousViewBeforeResults);
+      updateUrl(previousViewBeforeResults);
     } else {
       setCurrentView('dashboard');
+      updateUrl('dashboard');
     }
   };
 
@@ -250,14 +382,26 @@ function App() {
     setUploadState(state);
   };
 
-  const handleNavigate = (view) => {
-    // For admins, keep them within admin views only
+  const handleNavigate = (view, options = {}) => {
     if (user?.role === 'admin') {
       setCurrentView('admin-dashboard');
+      updateUrl('admin-dashboard');
       return;
     }
+    if (view === 'upload' && options.resetUploadState) {
+      setUploadState(null);
+    }
     setCurrentView(view);
+    updateUrl(view);
   };
+
+  useEffect(() => {
+    if (!isAuthenticated || isAdmin) return;
+    if (currentView === 'results' && !reportData) {
+      setCurrentView('upload');
+      updateUrl('upload', true);
+    }
+  }, [currentView, reportData, isAuthenticated, isAdmin]);
 
   // Show landing/login/signup if not authenticated
   if (!isAuthenticated) {
@@ -272,9 +416,11 @@ function App() {
             onSwitchToSignup={() => {
               setAuthView('signup');
               setCurrentView('signup');
+              updateUrl('signup');
             }}
             onBackToLanding={() => {
               setCurrentView('landing');
+              updateUrl('landing');
             }}
           />
         )}
@@ -284,9 +430,11 @@ function App() {
             onSwitchToLogin={() => {
               setAuthView('login');
               setCurrentView('login');
+              updateUrl('login');
             }}
             onBackToLanding={() => {
               setCurrentView('landing');
+              updateUrl('landing');
             }}
           />
         )}
@@ -294,14 +442,12 @@ function App() {
     );
   }
 
-  const isAdmin = user?.role === 'admin';
-
   return (
     <div className="App">
       {/* Real-time update toast (Socket.IO) */}
       {realtimeToast && (
         <div
-          className="fixed top-0 left-0 right-0 z-[80] flex items-center justify-center px-4 py-3 bg-[#8B0000] text-white shadow-lg"
+          className="fixed top-0 left-0 right-0 z-[80] flex items-center justify-center px-4 py-3 bg-[#8B0000] text-white shadow-lg animate-slide-down"
           role="alert"
         >
           <i className="fas fa-bell mr-2"></i>
@@ -322,16 +468,14 @@ function App() {
       )}
 
       <div className="flex flex-col min-h-screen">
-        {/* Header - Always visible on all pages - Higher z-index than sidebar */}
+        {/* Header */}
         <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-[60]">
           <div className="flex items-center justify-between px-4 md:px-6 py-4">
             <div className="flex items-center gap-4">
-              {/* Hamburger Menu Button - Always visible to toggle sidebar */}
               <button
                 className="p-3 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 aria-label="Toggle sidebar"
-                title={sidebarOpen ? "Close menu" : "Open menu"}
               >
                 {sidebarOpen ? (
                   <i className="fas fa-times text-2xl text-[#8B0000]"></i>
@@ -339,15 +483,13 @@ function App() {
                   <i className="fas fa-bars text-2xl text-[#8B0000]"></i>
                 )}
               </button>
-              {/* Logo and Title */}
               <div className="flex items-center gap-3">
                 <i className="fas fa-heartbeat text-2xl text-[#8B0000]"></i>
                 <h1 className="text-xl font-bold text-[#8B0000]">Health Monitoring Hub</h1>
               </div>
             </div>
-            {/* User Info */}
             <div className="flex items-center gap-4">
-                <div className="text-right hidden sm:block">
+              <div className="text-right hidden sm:block">
                 <div className="font-medium text-gray-900 flex items-center gap-2 justify-end">
                   <span>{user?.name || 'User'}</span>
                   {isAdmin && (
@@ -378,7 +520,7 @@ function App() {
             ></div>
           )}
 
-          {/* Sidebar - Hidden by default, shown when hamburger is clicked */}
+          {/* Sidebar */}
           <aside className={`${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
           } fixed md:fixed inset-y-0 left-0 z-[50] w-64 transition-transform duration-300 bg-white border-r border-gray-200 shadow-lg flex flex-col`}>
@@ -417,11 +559,10 @@ function App() {
                   }`}
                   onClick={() => {
                     if (item.id === 'manual') {
-                      setCurrentView('manual');
+                      handleNavigate('manual');
                     } else {
                       handleNavigate(item.id);
                     }
-                    // Close sidebar on mobile after navigation
                     if (window.innerWidth < 768) {
                       setSidebarOpen(false);
                     }
@@ -455,7 +596,7 @@ function App() {
                 )}
                 {currentView === 'upload' && (
                   <UploadReport 
-                    key={`upload-${user?.id || 'no-user'}`} // Force remount when user changes
+                    key={`upload-${user?.id || 'no-user'}`}
                     onUploadSuccess={handleUploadSuccess} 
                     onBack={() => handleNavigate('dashboard')}
                     initialState={uploadState}
@@ -465,7 +606,7 @@ function App() {
                 )}
                 {currentView === 'manual' && (
                   <UploadReport 
-                    key={`manual-${user?.id || 'no-user'}`} // Force remount when user changes
+                    key={`manual-${user?.id || 'no-user'}`}
                     onUploadSuccess={handleUploadSuccess} 
                     onBack={() => handleNavigate('dashboard')}
                     initialState={uploadState}
@@ -478,27 +619,17 @@ function App() {
                     <ResultsDisplay 
                       reportId={reportData.reportId}
                       cbcData={reportData.cbcData}
+                      gender={reportData.gender || null}
                       onBack={handleBack}
                       onUploadNew={() => {
-                        // Clear current report context and go back to upload screen
-                        setReportData(null);
+                        saveReportData(null);
+                        setUploadState(null);
                         setPreviousViewBeforeResults('upload');
                         setCurrentView('upload');
+                        updateUrl('upload');
                       }}
                     />
-                  ) : (
-                    <div className="upload-container">
-                      <div className="error-message">
-                        No report data available. Please upload a file or enter values manually.
-                      </div>
-                      <button onClick={() => setCurrentView('upload')} className="btn-primary" style={{ marginTop: '1rem' }}>
-                        Upload Report
-                      </button>
-                      <button onClick={() => setCurrentView('manual')} className="btn-secondary" style={{ marginTop: '1rem', marginLeft: '1rem' }}>
-                        Manual Entry
-                      </button>
-                    </div>
-                  )
+                  ) : null
                 )}
                 {currentView === 'history' && (
                   <HistoryGraph onNavigate={handleNavigate} />
@@ -543,6 +674,23 @@ function App() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-30px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .animate-slide-down {
+          animation: slideDown 0.5s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

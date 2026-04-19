@@ -113,33 +113,26 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-[#fff8f8] to-[#FFE4E1] p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen p-4 md:p-8 relative overflow-hidden" style={{
+      background: 'linear-gradient(180deg, #fff5f5 0%, #ffe0e0 10%, #ffcccc 20%, #ffb3b3 35%, #ff9999 50%, #ff8080 65%, #e06666 80%, #cc4d4d 90%, #b33b3b 100%)',
+      backgroundAttachment: 'fixed'
+    }}>
+      <div className="max-w-7xl mx-auto relative z-10">
         {/* Header */}
         <div className="mb-6 md:mb-8">
-          {onBack && (
-            <button 
-              onClick={onBack}
-              className="flex items-center gap-2 text-[#8B0000] hover:text-[#B22222] mb-4 group transition-colors"
-            >
-              <i className="fas fa-arrow-left group-hover:-translate-x-1 transition-transform"></i>
-              <span className="font-medium">Back to Dashboard</span>
-            </button>
-          )}
-          
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-[#8B0000] mb-2">
+              <h1 className="text-3xl md:text-4xl font-bold text-[#2c1212] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>
                 Health History & Trends
               </h1>
-              <p className="text-gray-600">
+              <p className="text-[#4e2a2a] font-medium">
                 Track your CBC parameters over time and identify patterns in your health journey
               </p>
             </div>
             <Button 
               onClick={handleExportData}
               variant="outline"
-              className="border-[#8B0000] text-[#8B0000] hover:bg-[#FFE4E1]"
+              className="border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 hover:scale-105"
             >
               <i className="fas fa-download mr-2"></i>
               Export Data
@@ -158,7 +151,10 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
                 key={range.id}
                 variant={timeRange === range.id ? 'default' : 'outline'}
                 onClick={() => setTimeRange(range.id)}
-                className={timeRange === range.id ? 'bg-[#8B0000] hover:bg-[#B22222]' : ''}
+                className={timeRange === range.id 
+                  ? 'bg-gradient-to-r from-[#8B0000] to-[#B22222] hover:from-[#A52A2A] hover:to-[#8B0000] text-white shadow-lg shadow-red-900/50 transition-all duration-300 hover:scale-105' 
+                  : 'border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 hover:scale-105'
+                }
               >
                 {range.label}
               </Button>
@@ -171,9 +167,9 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
           {/* Left Column - Key Metrics */}
           <div className="space-y-6">
             {/* Overall Health Score */}
-            <Card className="shadow-lg">
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                   <i className="fas fa-heartbeat text-[#8B0000]"></i>
                   Overall Health Score
                 </CardTitle>
@@ -184,7 +180,7 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
                   <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden mb-3">
                     <div className="h-full bg-gradient-to-r from-green-400 via-[#8B0000] to-[#B22222]" style={{ width: '82%' }}></div>
                   </div>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-[#4e2a2a]">
                     Based on {reportsData.length} reports over 15 months
                   </p>
                 </div>
@@ -192,9 +188,9 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
             </Card>
 
             {/* Key Statistics */}
-            <Card className="shadow-lg">
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                   <i className="fas fa-chart-bar text-[#8B0000]"></i>
                   Key Statistics
                 </CardTitle>
@@ -206,10 +202,10 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
                   { label: 'Normal Reports', value: '60%', icon: 'fa-check-circle', color: 'text-green-500' },
                   { label: 'Improvement Trend', value: '+15%', icon: 'fa-chart-line', color: 'text-[#8B0000]' }
                 ].map((stat, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors">
+                  <div key={index} className="flex items-center justify-between p-3 hover:bg-gradient-to-r hover:from-[#FFE4E1] hover:to-transparent rounded-lg transition-all duration-300 cursor-pointer">
                     <div className="flex items-center gap-3">
                       <i className={`fas ${stat.icon} ${stat.color} text-lg`}></i>
-                      <span className="font-medium">{stat.label}</span>
+                      <span className="font-medium text-gray-700">{stat.label}</span>
                     </div>
                     <span className="font-bold text-gray-900">{stat.value}</span>
                   </div>
@@ -220,21 +216,21 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
 
           {/* Middle Column - Main Chart */}
           <div className="lg:col-span-2">
-            <Card className="shadow-lg h-full">
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm h-full">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                     <i className="fas fa-chart-line text-[#8B0000]"></i>
                     Comprehensive Health Trends
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-[#4e2a2a]">
                     Interactive visualization of all CBC parameters over time
                   </CardDescription>
                 </div>
                 <select 
                   value={selectedParameter}
                   onChange={(e) => setSelectedParameter(e.target.value)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white focus:ring-2 focus:ring-[#8B0000] focus:border-transparent"
+                  className="px-3 py-1.5 border-2 border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#8B0000] focus:border-transparent transition-all duration-300 hover:border-[#8B0000]/50"
                 >
                   <option value="all">All Parameters</option>
                   <option value="hemoglobin">Hemoglobin</option>
@@ -302,16 +298,16 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
 
         {/* Tabbed Interface */}
         <Tabs defaultValue="table" className="mb-8">
-          <TabsList className="grid w-full grid-cols-3 mb-6">
-            <TabsTrigger value="table">
+          <TabsList className="grid w-full grid-cols-3 mb-6 bg-white/50 backdrop-blur-sm p-1 rounded-lg">
+            <TabsTrigger value="table" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#8B0000] data-[state=active]:to-[#B22222] data-[state=active]:text-white transition-all duration-300">
               <i className="fas fa-table mr-2"></i>
               Data Table
             </TabsTrigger>
-            <TabsTrigger value="charts">
+            <TabsTrigger value="charts" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#8B0000] data-[state=active]:to-[#B22222] data-[state=active]:text-white transition-all duration-300">
               <i className="fas fa-chart-pie mr-2"></i>
               Detailed Charts
             </TabsTrigger>
-            <TabsTrigger value="insights">
+            <TabsTrigger value="insights" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#8B0000] data-[state=active]:to-[#B22222] data-[state=active]:text-white transition-all duration-300">
               <i className="fas fa-lightbulb mr-2"></i>
               AI Insights
             </TabsTrigger>
@@ -319,30 +315,30 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
 
           {/* Data Table Tab */}
           <TabsContent value="table">
-            <Card className="shadow-lg">
+            <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
               <CardHeader>
-                <CardTitle>Complete Report History</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-[#2c1212]">Complete Report History</CardTitle>
+                <CardDescription className="text-[#4e2a2a]">
                   All your CBC reports with detailed parameters
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-gray-50">
+                    <thead className="bg-gradient-to-r from-[#FFE4E1] to-[#fff8f8]">
                       <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Date</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Type</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Hemoglobin</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">WBC</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Platelets</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Status</th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900">Notes</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#2c1212]">Date</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#2c1212]">Type</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#2c1212]">Hemoglobin</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#2c1212]">WBC</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#2c1212]">Platelets</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#2c1212]">Status</th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-[#2c1212]">Notes</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {reportsData.map(report => (
-                        <tr key={report.id} className="hover:bg-gray-50 transition-colors">
+                        <tr key={report.id} className="hover:bg-gradient-to-r hover:from-[#FFE4E1] hover:to-transparent transition-all duration-300">
                           <td className="px-4 py-3 text-sm text-gray-900">{report.date}</td>
                           <td className="px-4 py-3 text-sm text-gray-700">{report.type}</td>
                           <td className="px-4 py-3 text-sm">
@@ -392,9 +388,9 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
           <TabsContent value="charts">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Monthly Averages Bar Chart */}
-              <Card className="shadow-lg">
+              <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                     <i className="fas fa-chart-bar text-[#8B0000]"></i>
                     Monthly Averages
                   </CardTitle>
@@ -417,9 +413,9 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
               </Card>
 
               {/* Parameter Correlation Scatter Plot */}
-              <Card className="shadow-lg">
+              <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                     <i className="fas fa-project-diagram text-[#8B0000]"></i>
                     Parameter Correlation
                   </CardTitle>
@@ -467,9 +463,9 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
               </Card>
 
               {/* WBC Differential Chart */}
-              <Card className="shadow-lg">
+              <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                     <i className="fas fa-microscope text-[#8B0000]"></i>
                     WBC Differential
                   </CardTitle>
@@ -514,9 +510,9 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
               </Card>
 
               {/* RBC Indices Chart */}
-              <Card className="shadow-lg">
+              <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                     <i className="fas fa-circle text-[#8B0000]"></i>
                     RBC Indices Trends
                   </CardTitle>
@@ -566,9 +562,9 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
           <TabsContent value="insights">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* AI Analysis */}
-              <Card className="shadow-lg">
+              <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                     <i className="fas fa-brain text-[#8B0000]"></i>
                     AI Health Analysis
                   </CardTitle>
@@ -600,7 +596,7 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
                       color: 'text-purple-600 bg-purple-50'
                     }
                   ].map((insight, index) => (
-                    <div key={index} className={`p-4 rounded-lg border ${insight.color.split(' ')[1]}`}>
+                    <div key={index} className={`p-4 rounded-xl border shadow-sm transition-all duration-300 hover:scale-105 cursor-pointer ${insight.color.split(' ')[1]}`}>
                       <div className="flex items-center gap-3 mb-2">
                         <div className={`w-10 h-10 rounded-full ${insight.color.split(' ')[1]} flex items-center justify-center`}>
                           <i className={`fas ${insight.icon} ${insight.color.split(' ')[0]}`}></i>
@@ -614,35 +610,35 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
               </Card>
 
               {/* Prediction & Recommendations */}
-              <Card className="shadow-lg">
+              <Card className="shadow-2xl hover:shadow-red-900/20 transition-all duration-500 border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-[#2c1212]">
                     <i className="fas fa-chart-line text-[#8B0000]"></i>
                     Predictions & Forecast
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="p-4 bg-gradient-to-r from-[#fff8f8] to-white rounded-lg border border-[#ffcccc]">
-                      <h4 className="font-semibold text-[#8B0000] mb-2">
-                        <i className="fas fa-calendar-alt mr-2"></i>
+                    <div className="p-5 bg-gradient-to-r from-[#FFF0EE] to-[#FFE4E1] rounded-xl border border-[#ffcccc] shadow-sm">
+                      <h4 className="font-semibold text-[#8B0000] mb-3 flex items-center gap-2">
+                        <i className="fas fa-calendar-alt"></i>
                         3-Month Forecast
                       </h4>
-                      <p className="text-sm text-gray-600 mb-3">
+                      <p className="text-sm text-gray-700 mb-3">
                         Based on historical data, here's what to expect:
                       </p>
                       <ul className="space-y-2 text-sm">
-                        <li className="flex items-center gap-2">
+                        <li className="flex items-center gap-2 p-2 hover:bg-white/50 rounded-lg transition-all">
                           <i className="fas fa-check text-green-600"></i>
-                          <span>Hemoglobin: Stable around 14.0-14.5 g/dL</span>
+                          <span className="text-gray-700">Hemoglobin: Stable around 14.0-14.5 g/dL</span>
                         </li>
-                        <li className="flex items-center gap-2">
+                        <li className="flex items-center gap-2 p-2 hover:bg-white/50 rounded-lg transition-all">
                           <i className="fas fa-check text-green-600"></i>
-                          <span>WBC: Normal range (6.5-7.5 ×10³/µL)</span>
+                          <span className="text-gray-700">WBC: Normal range (6.5-7.5 ×10³/µL)</span>
                         </li>
-                        <li className="flex items-center gap-2">
+                        <li className="flex items-center gap-2 p-2 hover:bg-white/50 rounded-lg transition-all">
                           <i className="fas fa-exclamation-triangle text-yellow-600"></i>
-                          <span>Platelets: Monitor for seasonal variations</span>
+                          <span className="text-gray-700">Platelets: Monitor for seasonal variations</span>
                         </li>
                       </ul>
                     </div>
@@ -658,4 +654,3 @@ const HistoryTrends = ({ onBack, onNavigate }) => {
 };
 
 export default HistoryTrends;
-

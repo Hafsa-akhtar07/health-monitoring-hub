@@ -31,7 +31,9 @@ const detectConditions = (ruleBasedResults, cbcData, gender = null) => {
     const mch = getParamValue('mch');
     const mchc = getParamValue('mchc');
 
-    if (hb < 12 || (gender === 'male' && hb < 13)) {
+    // Cleveland Clinic: Female 11.5–15.5, Male 13–17
+    const hbLowThreshold = gender === 'male' ? 13 : 11.5;
+    if (hb < hbLowThreshold) {
       if (mcv && mcv < 80) {
         conditions.push({
           condition: 'Microcytic Anemia',
@@ -63,7 +65,8 @@ const detectConditions = (ruleBasedResults, cbcData, gender = null) => {
   // Leukocytosis (High WBC)
   if (isAbnormal('wbc')) {
     const wbc = getParamValue('wbc');
-    if (wbc > 11000) {
+    // Cleveland Clinic: 4,000–10,000 cells/μL
+    if (wbc > 10000) {
       conditions.push({
         condition: 'Leukocytosis',
         possibleCauses: ['Infection', 'Inflammation', 'Leukemia (rare)', 'Stress response'],
@@ -93,7 +96,8 @@ const detectConditions = (ruleBasedResults, cbcData, gender = null) => {
         confidence: 0.80,
         description: 'Low platelet count, may affect blood clotting ability'
       });
-    } else if (platelets > 450000) {
+    // Cleveland Clinic: 150,000–400,000 cells/μL
+    } else if (platelets > 400000) {
       conditions.push({
         condition: 'Thrombocytosis',
         possibleCauses: ['Inflammation', 'Iron deficiency', 'Myeloproliferative disorders'],
