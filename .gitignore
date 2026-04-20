@@ -50,7 +50,6 @@ fyp_material/
 
 # ML model artifacts in Model/ (large binaries + encoders — keep local or distribute separately)
 Model/*.pkl
-Model/*.pkl
 !Model/label_encoder_m1.pkl
 !Model/label_encoder_m2.pkl
 !Model/model_1_core_cbc.pkl
