@@ -2,8 +2,8 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const fsp = require('fs/promises');
 const axios = require('axios');
-const FormData = require('form-data');
 const { validateExtractedData } = require('../services/ocrService');
 const { query, isDatabaseReady } = require('../config/database');
 const authenticate = require('../middleware/auth');
@@ -104,39 +104,61 @@ const upload = multer({
 /**
  * Call local Python OCR service
  */
-async function callPythonOCRService(imagePath, originalFilename) {
+async function callPythonOCRService(imagePath, originalFilename, mimeType) {
   try {
     // Use 127.0.0.1 (not "localhost") so Node does not connect via IPv6 ::1 while Flask listens on IPv4 only.
     const ocrServiceUrl = process.env.OCR_SERVICE_URL || 'http://127.0.0.1:5002';
     console.log(`📤 Calling Python OCR service at ${ocrServiceUrl}/api/extract...`);
     
-    const form = new FormData();
-    form.append('file', fs.createReadStream(imagePath), {
-      filename: originalFilename,
-      contentType: 'image/jpeg'
-    });
+    const url = `${ocrServiceUrl}/api/extract`;
+    const buf = await fsp.readFile(imagePath);
+    const ct = mimeType || 'application/octet-stream';
 
-    // Some Azure ingress/proxies reject chunked transfer encoding for multipart uploads.
-    // Explicitly set Content-Length to force a non-chunked request when possible.
-    const contentLength = await new Promise((resolve, reject) => {
-      form.getLength((err, length) => {
-        if (err) return reject(err);
-        resolve(length);
+    // Prefer Node's built-in fetch + FormData/File for multipart uploads.
+    // In practice this is more reliable through some Azure ingress paths than axios+form-data streams.
+    const body = new FormData();
+    // `File` exists on modern Node runtimes (Azure uses Node 22.x per deployment settings).
+    // Fall back to `Blob` for older local Node versions.
+    const filePart =
+      typeof File !== 'undefined'
+        ? new File([buf], originalFilename, { type: ct })
+        : new Blob([buf], { type: ct });
+    body.append('file', filePart, originalFilename);
+
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 300_000);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        body,
+        signal: controller.signal,
       });
-    });
+    } finally {
+      clearTimeout(t);
+    }
 
-    const response = await axios.post(`${ocrServiceUrl}/api/extract`, form, {
-      headers: {
-        ...form.getHeaders(),
-        'Content-Length': contentLength,
-      },
-      timeout: 300000, // 5 minute timeout for OCR (PaddleOCR can be slow on first run)
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-      proxy: false // avoid HTTP(S)_PROXY sending local traffic through a proxy
-    });
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
 
-    if (response.data && response.data.success) {
+    if (!res.ok) {
+      const err = new Error(`OCR HTTP ${res.status}`);
+      err.response = {
+        status: res.status,
+        headers: { 'content-type': res.headers.get('content-type') },
+        data: text,
+      };
+      err.config = { url };
+      throw err;
+    }
+
+    if (data && data.success) {
+      const response = { data };
       console.log(`✅ Python OCR service successful: ${response.data.total_detections} text detections`);
       
       // Log success to logger
@@ -180,7 +202,7 @@ async function callPythonOCRService(imagePath, originalFilename) {
         structured_data_preprocessed: response.data.structured_data_preprocessed
       };
     } else {
-      throw new Error(response.data?.error || 'OCR extraction failed');
+      throw new Error((data && data.error) || 'OCR extraction failed');
     }
     
   } catch (error) {
@@ -623,7 +645,11 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
     
     try {
       // Call Python OCR service
-      const ocrResult = await callPythonOCRService(filePath, req.file.originalname);
+      const ocrResult = await callPythonOCRService(
+        filePath,
+        req.file.originalname,
+        req.file.mimetype
+      );
       
       if (ocrResult.success) {
         const raw = ocrResult.raw_response || {};
