@@ -471,9 +471,10 @@ function App() {
         {/* Header */}
         <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-[60]">
           <div className="flex items-center justify-between px-4 md:px-6 py-4">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <button
-                className="p-3 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                type="button"
+                className="p-2 sm:p-3 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 shrink-0 md:hidden"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 aria-label="Toggle sidebar"
               >
@@ -483,12 +484,14 @@ function App() {
                   <i className="fas fa-bars text-2xl text-[#8B0000]"></i>
                 )}
               </button>
-              <div className="flex items-center gap-3">
-                <i className="fas fa-heartbeat text-2xl text-[#8B0000]"></i>
-                <h1 className="text-xl font-bold text-[#8B0000]">Health Monitoring Hub</h1>
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <i className="fas fa-heartbeat text-xl sm:text-2xl text-[#8B0000] shrink-0"></i>
+                <h1 className="text-base sm:text-xl font-bold text-[#8B0000] truncate">
+                  Health Monitoring Hub
+                </h1>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
               <div className="text-right hidden sm:block">
                 <div className="font-medium text-gray-900 flex items-center gap-2 justify-end">
                   <span>{user?.name || 'User'}</span>
@@ -511,7 +514,7 @@ function App() {
           </div>
         </header>
 
-        <div className="flex flex-1 relative">
+        <div className="flex flex-1 relative min-h-0">
           {/* Sidebar Overlay for Mobile */}
           {sidebarOpen && (
             <div 
@@ -520,10 +523,12 @@ function App() {
             ></div>
           )}
 
-          {/* Sidebar */}
-          <aside className={`${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          } fixed md:fixed inset-y-0 left-0 z-[50] w-64 transition-transform duration-300 bg-white border-r border-gray-200 shadow-lg flex flex-col`}>
+          {/* Sidebar: drawer on small screens, in-flow on md+ */}
+          <aside
+            className={`${
+              sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            } fixed left-0 top-16 bottom-0 z-[50] w-64 max-w-[min(100vw,16rem)] flex flex-col bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 overflow-y-auto md:static md:top-auto md:bottom-auto md:z-0 md:max-w-none md:translate-x-0 md:flex-shrink-0 md:overflow-y-visible md:shadow-none`}
+          >
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -582,7 +587,7 @@ function App() {
           </aside>
 
           {/* Main Content */}
-          <main className="flex-1 overflow-y-auto min-h-screen bg-gradient-to-br from-white via-[#fff8f8] to-[#FFE4E1]">
+          <main className="flex-1 min-w-0 overflow-y-auto min-h-[calc(100vh-4.5rem)] md:min-h-screen bg-gradient-to-br from-white via-[#fff8f8] to-[#FFE4E1]">
             {isAdmin ? (
               <>
                 {currentView === 'admin-dashboard' && (

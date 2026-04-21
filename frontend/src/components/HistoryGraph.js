@@ -492,7 +492,7 @@ function HistoryGraph({ userId = null, onNavigate }) {
   }, {});
 
   return (
-    <div className="min-h-screen p-4 md:p-8 relative overflow-hidden" style={{
+    <div className="min-h-screen p-4 md:p-8 relative overflow-x-clip" style={{
       background: 'linear-gradient(180deg, #fff5f5 0%, #ffe0e0 10%, #ffcccc 20%, #ffb3b3 35%, #ff9999 50%, #ff8080 65%, #e06666 80%, #cc4d4d 90%, #b33b3b 100%)',
       backgroundAttachment: 'fixed'
     }}>
@@ -508,7 +508,7 @@ function HistoryGraph({ userId = null, onNavigate }) {
         </div>
 
         {/* View Mode Toggle */}
-        <div className="mb-6 flex flex-wrap gap-4">
+        <div className="mb-6 flex flex-wrap gap-3 sm:gap-4 items-stretch">
           <Button
             variant={viewMode === 'table' ? 'default' : 'outline'}
             onClick={() => setViewMode('table')}
@@ -611,7 +611,7 @@ function HistoryGraph({ userId = null, onNavigate }) {
             <Button
               variant="outline"
               onClick={() => onNavigate('upload', { resetUploadState: true })}
-              className="border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 hover:scale-105 ml-auto"
+              className="border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 sm:hover:scale-105 w-full sm:w-auto md:ml-auto"
             >
               <i className="fas fa-plus mr-2"></i>
               Add New Report
@@ -828,7 +828,7 @@ function HistoryGraph({ userId = null, onNavigate }) {
                       </div>
                     ) : (
                       <>
-                        <div className="h-[450px] mb-6">
+                        <div className="h-[260px] sm:h-[340px] md:h-[450px] mb-6 w-full min-w-0">
                           <ResponsiveContainer width="100%" height="100%">
                             {chartType === 'line' ? (
                               <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>

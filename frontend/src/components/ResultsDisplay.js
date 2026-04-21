@@ -612,7 +612,7 @@ const getGoogleLink = (text) =>
   };
 
   return (
-    <div className="min-h-screen p-4 md:p-8 relative overflow-hidden" style={{
+    <div className="min-h-screen p-4 md:p-8 relative overflow-x-clip" style={{
       background: 'linear-gradient(180deg, #fff5f5 0%, #ffe0e0 10%, #ffcccc 20%, #ffb3b3 35%, #ff9999 50%, #ff8080 65%, #e06666 80%, #cc4d4d 90%, #b33b3b 100%)',
       backgroundAttachment: 'fixed'
     }}>
@@ -629,18 +629,18 @@ const getGoogleLink = (text) =>
               </p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto sm:flex-shrink-0">
               <Button 
                 variant="outline"
                 onClick={handleExportPDF}
-                className="border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 hover:scale-105"
+                className="border-[#8B0000] text-[#8B0000] hover:bg-white/80 transition-all duration-300 sm:hover:scale-105 w-full sm:w-auto"
               >
                 <i className="fas fa-download mr-2"></i>
                 Export Report
               </Button>
               <Button 
                 onClick={onUploadNew}
-                className="bg-gradient-to-r from-[#8B0000] to-[#B22222] hover:from-[#A52A2A] hover:to-[#8B0000] text-white shadow-lg shadow-red-900/50 transition-all duration-300 hover:scale-105"
+                className="bg-gradient-to-r from-[#8B0000] to-[#B22222] hover:from-[#A52A2A] hover:to-[#8B0000] text-white shadow-lg shadow-red-900/50 transition-all duration-300 sm:hover:scale-105 w-full sm:w-auto"
               >
                 <i className="fas fa-plus mr-2"></i>
                 New Analysis

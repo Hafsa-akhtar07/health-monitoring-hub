@@ -6,14 +6,7 @@ import { useNavigate } from 'react-router-dom';
 
 const LandingPage = ({ onGetStarted }) => {
   const navigate = useNavigate();
-  
-  const handleGetStarted = () => {
-    navigate('/login');
-    if (onGetStarted) onGetStarted();
-  };
-  
-  // Rest of your component remains the same
-
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const [currentImage, setCurrentImage] = useState(0);
 
@@ -130,27 +123,68 @@ const LandingPage = ({ onGetStarted }) => {
         html {
           scroll-behavior: smooth;
         }
+
+        @media (max-width: 768px) {
+          body {
+            background-attachment: scroll !important;
+          }
+        }
       `}</style>
 
       {/* Header */}
       <header className="sticky top-0 z-50 w-full navbar-blur transition-all duration-300">
-        <div className="container flex h-16 items-center justify-between px-4 md:px-8 mx-auto">
-          <div className="flex items-center gap-3">
-            <i className="fas fa-heartbeat text-3xl text-[#c0392b]"></i>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-[#2c1212]" style={{ fontFamily: "'Playfair Display', serif" }}>
+        <div className="container flex h-16 items-center justify-between gap-2 px-4 md:px-8 mx-auto max-w-full">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 md:flex-none">
+            <i className="fas fa-heartbeat text-2xl sm:text-3xl text-[#c0392b] shrink-0"></i>
+            <h1 className="text-lg sm:text-2xl md:text-3xl font-bold tracking-tight text-[#2c1212] truncate" style={{ fontFamily: "'Playfair Display', serif" }}>
               Health Monitoring Hub
             </h1>
           </div>
-          <nav className="hidden md:flex items-center gap-7">
+          <nav className="hidden md:flex items-center gap-7 shrink-0">
             <a href="#home" onClick={(e) => handleSmoothScroll(e, '#home')} className="text-[#571f1f] font-medium hover:text-[#b13a3a] transition-colors">Home</a>
             <a href="#features" onClick={(e) => handleSmoothScroll(e, '#features')} className="text-[#571f1f] font-medium hover:text-[#b13a3a] transition-colors">Features</a>
             <a href="#steps" onClick={(e) => handleSmoothScroll(e, '#steps')} className="text-[#571f1f] font-medium hover:text-[#b13a3a] transition-colors">How It Works</a>
             <a href="#contact" onClick={(e) => handleSmoothScroll(e, '#contact')} className="text-[#571f1f] font-medium hover:text-[#b13a3a] transition-colors">Contact</a>
           </nav>
-          <Button onClick={() => onGetStarted && onGetStarted()} className="bg-gradient-to-r from-[#c0392b] to-[#941e1e] hover:from-[#d94a3a] hover:to-[#ad2a2a] text-white font-semibold px-6 py-2 rounded-full shadow-lg shadow-red-800/30">
-             Try Free Analysis
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-full border border-red-300/60 bg-white/70 text-[#8B0000] hover:bg-red-50"
+              aria-expanded={mobileNavOpen}
+              aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+              onClick={() => setMobileNavOpen((o) => !o)}
+            >
+              <i className={`fas ${mobileNavOpen ? 'fa-times' : 'fa-bars'} text-lg`}></i>
+            </button>
+            <Button
+              onClick={() => {
+                setMobileNavOpen(false);
+                if (onGetStarted) onGetStarted();
+                else navigate('/login');
+              }}
+              className="bg-gradient-to-r from-[#c0392b] to-[#941e1e] hover:from-[#d94a3a] hover:to-[#ad2a2a] text-white font-semibold px-3 py-2 sm:px-6 text-xs sm:text-sm rounded-full shadow-lg shadow-red-800/30 whitespace-nowrap"
+            >
+              <span className="sm:hidden">Try free</span>
+              <span className="hidden sm:inline">Try Free Analysis</span>
+            </Button>
+          </div>
         </div>
+        {mobileNavOpen && (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-black/40 md:hidden"
+              aria-label="Close menu"
+              onClick={() => setMobileNavOpen(false)}
+            />
+            <nav className="relative z-50 border-t border-red-200/50 bg-[#fff8f8]/95 px-4 py-4 md:hidden flex flex-col gap-3 shadow-inner">
+              <a href="#home" onClick={(e) => { setMobileNavOpen(false); handleSmoothScroll(e, '#home'); }} className="text-[#571f1f] font-medium py-2 border-b border-red-100/80">Home</a>
+              <a href="#features" onClick={(e) => { setMobileNavOpen(false); handleSmoothScroll(e, '#features'); }} className="text-[#571f1f] font-medium py-2 border-b border-red-100/80">Features</a>
+              <a href="#steps" onClick={(e) => { setMobileNavOpen(false); handleSmoothScroll(e, '#steps'); }} className="text-[#571f1f] font-medium py-2 border-b border-red-100/80">How It Works</a>
+              <a href="#contact" onClick={(e) => { setMobileNavOpen(false); handleSmoothScroll(e, '#contact'); }} className="text-[#571f1f] font-medium py-2">Contact</a>
+            </nav>
+          </>
+        )}
       </header>
 
       {/* Hero Section */}
@@ -161,7 +195,7 @@ const LandingPage = ({ onGetStarted }) => {
               <div className="inline-block px-4 py-1 rounded-full bg-white/60 backdrop-blur-sm text-[#a1352a] text-sm font-semibold border border-red-300/60 shadow-sm">
                 <i className="fas fa-microchip mr-2"></i> AI-Powered Health Intelligence
               </div>
-              <h2 className="text-4xl md:text-6xl font-bold leading-tight text-[#241010]" style={{ textShadow: '0 1px 2px rgba(255,255,200,0.2)' }}>
+              <h2 className="text-3xl sm:text-4xl md:text-6xl font-bold leading-tight text-[#241010] text-balance break-words" style={{ textShadow: '0 1px 2px rgba(255,255,200,0.2)' }}>
                 Understand Your <span className="text-[#c53a2b] border-b-4 border-red-400 inline-block pb-1">Blood Test Results</span><br/> in Simple Terms
               </h2>
               <p className="text-lg text-[#4e2a2a] max-w-xl leading-relaxed font-medium">

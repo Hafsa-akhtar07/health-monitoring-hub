@@ -4,7 +4,7 @@ import { Card, CardContent } from './ui/card';
 
 const Dashboard = ({ onNavigate }) => {
   return (
-    <div className="min-h-screen p-6 md:p-8 relative overflow-hidden" style={{
+    <div className="min-h-screen p-4 sm:p-6 md:p-8 relative overflow-x-clip" style={{
       background: 'linear-gradient(180deg, #fff5f5 0%, #ffe0e0 10%, #ffcccc 20%, #ffb3b3 35%, #ff9999 50%, #ff8080 65%, #e06666 80%, #cc4d4d 90%, #b33b3b 100%)',
       backgroundAttachment: 'fixed'
     }}>
@@ -26,10 +26,10 @@ const Dashboard = ({ onNavigate }) => {
               <i className="fas fa-chart-line text-2xl text-white"></i>
             </div>
           </div>
-          <h1 className="text-5xl md:text-6xl font-bold text-[#2c1212] mb-3" style={{ fontFamily: "'Playfair Display', serif", textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold text-[#2c1212] mb-3 text-balance px-1" style={{ fontFamily: "'Playfair Display', serif", textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
             Health Monitoring Hub
           </h1>
-          <p className="text-lg md:text-xl text-[#4e2a2a] max-w-2xl mx-auto font-medium">
+          <p className="text-base sm:text-lg md:text-xl text-[#4e2a2a] max-w-2xl mx-auto font-medium px-2">
             Your intelligent CBC companion — Upload reports or enter values manually for instant health insights
           </p>
           <div className="flex justify-center gap-3 mt-4 flex-wrap">

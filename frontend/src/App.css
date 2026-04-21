@@ -2580,3 +2580,43 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Extra small screens: profile toggles and dense result headers */
+@media (max-width: 640px) {
+  .toggle-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .toggle-switch {
+    align-self: flex-end;
+  }
+
+  .parameter-header,
+  .condition-header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .app-header {
+    padding: 0.75rem 1rem;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  }
+
+  .header-title h1 {
+    font-size: 1.25rem;
+  }
+
+  .header-subtitle {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .graph-stats {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}

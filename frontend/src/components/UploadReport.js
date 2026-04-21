@@ -473,7 +473,7 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
   };
 
   return (
-    <div ref={topRef} className="min-h-screen p-4 md:p-8 relative overflow-hidden" style={{
+    <div ref={topRef} className="min-h-screen p-4 md:p-8 relative overflow-x-clip" style={{
       background: 'linear-gradient(180deg, #fff5f5 0%, #ffe0e0 10%, #ffcccc 20%, #ffb3b3 35%, #ff9999 50%, #ff8080 65%, #e06666 80%, #cc4d4d 90%, #b33b3b 100%)',
       backgroundAttachment: 'fixed'
     }}>

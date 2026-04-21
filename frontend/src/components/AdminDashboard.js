@@ -87,18 +87,19 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-white via-[#fff8f8] to-[#FFE4E1] p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-[#8B0000] mb-1">
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#8B0000] mb-1">
               Admin Dashboard
             </h1>
-            <p className="text-gray-600">
+            <p className="text-gray-600 text-sm sm:text-base">
               Monitor system usage, recent activity, and OCR failures. Admins do not upload reports here.
             </p>
           </div>
           <Button
             variant="outline"
             size="sm"
+            className="shrink-0 self-start sm:self-auto"
             onClick={async () => {
               const scrollY = window.scrollY;
               setRefreshing(true);
