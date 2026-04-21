@@ -12,7 +12,14 @@ function normalizeRemoteDatabaseUrl(url) {
   if (!url) return url;
   try {
     const u = new URL(url);
-    u.searchParams.delete('channel_binding');
+    // Neon connection strings sometimes include `channel_binding=require`.
+    // node-postgres (`pg`) does not support SCRAM channel binding, and leaving it as `require`
+    // can make connections fail. Force-disable it for this backend runtime.
+    //
+    // (Keeping the param present also makes the behavior explicit and debuggable.)
+    if (u.searchParams.get('channel_binding')?.toLowerCase() === 'require') {
+      u.searchParams.set('channel_binding', 'disable');
+    }
     return u.toString();
   } catch {
     return url;
