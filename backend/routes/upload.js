@@ -5,7 +5,7 @@ const fs = require('fs');
 const axios = require('axios');
 const FormData = require('form-data');
 const { validateExtractedData } = require('../services/ocrService');
-const { query } = require('../config/database');
+const { query, isDatabaseReady } = require('../config/database');
 const authenticate = require('../middleware/auth');
 const { logError, logSuccess } = require('../services/logger');
 
@@ -180,7 +180,22 @@ async function callPythonOCRService(imagePath, originalFilename) {
       mappedError.code = error.code; // preserve axios error code for outer handler
       throw mappedError;
     }
-    console.error('❌ Python OCR service error:', error.message);
+    if (error.response) {
+      const status = error.response.status;
+      const ct = error.response.headers?.['content-type'];
+      const data =
+        typeof error.response.data === 'string'
+          ? error.response.data.slice(0, 2000)
+          : error.response.data;
+      console.error('❌ Python OCR service HTTP error:', {
+        status,
+        contentType: ct,
+        dataPreview: data,
+        url: error.config?.url,
+      });
+    } else {
+      console.error('❌ Python OCR service error:', error.message);
+    }
     throw error;
   }
 }
@@ -734,32 +749,38 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
     console.log('='.repeat(80) + '\n');
 
     // Save report to database (with authenticated user ID)
-    let reportId;
-    try {
-      const result = await query(
-        `INSERT INTO reports (user_id, filename, file_path, extracted_data, created_at)
-         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-         RETURNING id`,
-        [req.user.id, req.file.originalname, filePath, JSON.stringify(extractedData)]
-      );
-      reportId = result.rows[0].id;
-      console.log(`✅ Report saved to database with ID: ${reportId} for user ${req.user.id}`);
+    // If DB is down/misconfigured in a deployment, don't fail the whole OCR flow.
+    let reportId = null;
+    let persistenceWarning = null;
+    if (!isDatabaseReady()) {
+      persistenceWarning =
+        'Database unavailable: report was processed but not saved to history. Fix DATABASE_URL for persistence.';
+      console.warn('⚠️', persistenceWarning);
+    } else {
+      try {
+        const result = await query(
+          `INSERT INTO reports (user_id, filename, file_path, extracted_data, created_at)
+           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+           RETURNING id`,
+          [req.user.id, req.file.originalname, filePath, JSON.stringify(extractedData)]
+        );
+        reportId = result.rows[0].id;
+        console.log(`✅ Report saved to database with ID: ${reportId} for user ${req.user.id}`);
 
-      const io = req.app.get('io');
-      if (io) {
-        io.emit('report:uploaded', {
-          reportId,
-          userId: req.user.id,
-          message: 'New report uploaded',
-          filename: req.file.originalname,
-        });
+        const io = req.app.get('io');
+        if (io) {
+          io.emit('report:uploaded', {
+            reportId,
+            userId: req.user.id,
+            message: 'New report uploaded',
+            filename: req.file.originalname,
+          });
+        }
+      } catch (dbError) {
+        persistenceWarning =
+          'Database error: report was processed but not saved to history. Check DATABASE_URL and server logs.';
+        console.error('Database error (continuing):', dbError);
       }
-    } catch (dbError) {
-      console.error('Database error:', dbError);
-      return res.status(500).json({
-        error: 'Database error',
-        message: 'Failed to save report to database'
-      });
     }
 
     // Return success response
@@ -769,6 +790,7 @@ router.post('/', authenticate, upload.single('file'), async (req, res) => {
       reportId,
       extractedData,
       warnings: validation.warnings,
+      persistenceWarning,
       fileInfo: {
         originalName: req.file.originalname,
         filename: req.file.filename,

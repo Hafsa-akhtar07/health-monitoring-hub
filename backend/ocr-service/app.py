@@ -675,6 +675,8 @@ if __name__ == "__main__":
     print(f"  max_edge={OCR_MAX_EDGE}  textline_ori={OCR_USE_TEXTLINE_ORI}  "
           f"det_limit={OCR_DET_LIMIT_SIDE}  second_pass={OCR_SECOND_PASS}")
     print(f"  ocr-code path: {ocr_code_path}")
-    print("  Health: GET  http://127.0.0.1:5002/health")
+    port = int(os.environ.get("PORT", os.environ.get("OCR_SERVICE_PORT", "5002")))
+    host = os.environ.get("HOST", "0.0.0.0")
+    print(f"  Health: GET  http://{host}:{port}/health")
     print("=" * 78)
-    app.run(host="127.0.0.1", port=5002, debug=True)
+    app.run(host=host, port=port, debug=False)
