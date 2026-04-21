@@ -3,7 +3,6 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
-const axios = require('axios');
 const { validateExtractedData } = require('../services/ocrService');
 const { query, isDatabaseReady } = require('../config/database');
 const authenticate = require('../middleware/auth');
@@ -101,13 +100,36 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
+function normalizeOcrServiceUrl(raw) {
+  const base = String(raw || '').trim().replace(/\/+$/, '');
+  if (!base) return base;
+
+  let out = base;
+  out = out.replace(
+    /hmh-ocr-gentleground-375d1134\.centralindia\.azurecontainerapps\.io/i,
+    'hmh-ocr.gentleground-375d3134.centralindia.azurecontainerapps.io'
+  );
+  out = out.replace(/375d1134/i, '375d3134');
+
+  if (out !== base) {
+    console.warn('⚠️ OCR_SERVICE_URL looked incorrect; normalized for this request:', {
+      from: base,
+      to: out,
+    });
+  }
+
+  return out;
+}
+
 /**
  * Call local Python OCR service
  */
 async function callPythonOCRService(imagePath, originalFilename, mimeType) {
   try {
     // Use 127.0.0.1 (not "localhost") so Node does not connect via IPv6 ::1 while Flask listens on IPv4 only.
-    const ocrServiceUrl = process.env.OCR_SERVICE_URL || 'http://127.0.0.1:5002';
+    const ocrServiceUrl = normalizeOcrServiceUrl(
+      process.env.OCR_SERVICE_URL || 'http://127.0.0.1:5002'
+    );
     console.log(`📤 Calling Python OCR service at ${ocrServiceUrl}/api/extract...`);
     
     const url = `${ocrServiceUrl}/api/extract`;
