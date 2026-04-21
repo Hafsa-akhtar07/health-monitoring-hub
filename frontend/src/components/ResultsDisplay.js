@@ -460,11 +460,7 @@ const ResultsDisplay = ({ reportId, cbcData, gender, onBack, onUploadNew }) => {
         const mapped = {
           dietary: suggestions.dietaryRecommendations || [],
           lifestyle: suggestions.lifestyleSuggestions || [],
-          medications: (suggestions.possibleMedications || []).map(med =>
-            med && med.name
-              ? `${med.name}: ${med.purpose || ''}${med.note ? ` (${med.note})` : ''}`
-              : med
-          ),
+          medications: suggestions.possibleMedications || [],
           doctorConsult: suggestions.whenToConsultDoctor || 'Please consult a healthcare provider for proper diagnosis and treatment.',
           disclaimer: suggestions.disclaimer || 'This information is for educational purposes only and not a substitute for professional medical advice.'
         };
@@ -609,7 +605,8 @@ const ResultsDisplay = ({ reportId, cbcData, gender, onBack, onUploadNew }) => {
       printWindow.print();
     }, 250);
   };
-
+const getGoogleLink = (text) =>
+  `https://www.google.com/search?q=${encodeURIComponent(text)}`;
   const handleRegenerateRecommendations = () => {
     fetchOpenAIRecommendations();
   };
@@ -957,12 +954,39 @@ const ResultsDisplay = ({ reportId, cbcData, gender, onBack, onUploadNew }) => {
                             Possible Medications (Informational Only)
                           </h4>
                           <ul className="space-y-2">
-                            {openAIResponse.medications.map((med, index) => (
-                              <li key={index} className="flex items-start gap-2">
-                                <i className="fas fa-check text-purple-600 mt-1"></i>
-                                <span className="text-gray-700">{med}</span>
-                              </li>
-                            ))}
+                            {openAIResponse.medications.map((med, index) => {
+  // handle BOTH cases (string OR object)
+  if (typeof med === "string") {
+    return (
+      <li key={index} className="flex items-start gap-2">
+        <i className="fas fa-check text-purple-600 mt-1"></i>
+        <span className="text-gray-700">{med}</span>
+      </li>
+    );
+  }
+
+  return (
+    <li key={index} className="flex items-start gap-2">
+      <i className="fas fa-check text-purple-600 mt-1"></i>
+
+      <span className="text-gray-700">
+        {med.name && (
+          <a
+            href={getGoogleLink(med.name)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 underline font-medium"
+          >
+            {med.name}
+          </a>
+        )}
+
+        {med.purpose && `: ${med.purpose}`}
+        {med.note && ` (${med.note})`}
+      </span>
+    </li>
+  );
+})}
                           </ul>
                           <p className="text-xs text-purple-700 mt-2">
                             Always consult a qualified clinician before starting or stopping any medication.
