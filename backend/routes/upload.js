@@ -116,8 +116,20 @@ async function callPythonOCRService(imagePath, originalFilename) {
       contentType: 'image/jpeg'
     });
 
+    // Some Azure ingress/proxies reject chunked transfer encoding for multipart uploads.
+    // Explicitly set Content-Length to force a non-chunked request when possible.
+    const contentLength = await new Promise((resolve, reject) => {
+      form.getLength((err, length) => {
+        if (err) return reject(err);
+        resolve(length);
+      });
+    });
+
     const response = await axios.post(`${ocrServiceUrl}/api/extract`, form, {
-      headers: form.getHeaders(),
+      headers: {
+        ...form.getHeaders(),
+        'Content-Length': contentLength,
+      },
       timeout: 300000, // 5 minute timeout for OCR (PaddleOCR can be slow on first run)
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
