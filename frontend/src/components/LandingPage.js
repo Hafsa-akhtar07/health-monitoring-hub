@@ -68,18 +68,18 @@ const LandingPage = ({ onGetStarted }) => {
        
 		 body {
           font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          /* Slightly deeper at the top so the hero + slider sit on consistent pink (no harsh “white band”) */
           background: linear-gradient(180deg, 
-            #fff5f5 0%,      /* Lightest - almost white pink */
-            #ffe0e0 10%,
-            #ffcccc 20%,
-            #ffb3b3 30%,
-            #ff9999 40%,
-            #ff8080 50%,
-            #e06666 60%,
-            #cc4d4d 70%,
-            #b33b3b 80%,
-            #992929 90%,
-            #801515 100%     /* Darkest - deep crimson red */
+            #ffe0e0 0%,
+            #ffcccc 12%,
+            #ffb3b3 24%,
+            #ff9999 36%,
+            #ff8080 48%,
+            #e06666 58%,
+            #cc4d4d 68%,
+            #b33b3b 78%,
+            #992929 88%,
+            #801515 100%
           );
           background-attachment: fixed;
           min-height: 100vh;
@@ -114,10 +114,12 @@ const LandingPage = ({ onGetStarted }) => {
           border-bottom: 1px solid rgba(190, 70, 70, 0.4);
         }
 
-        .slider-border {
-          background: rgba(255, 240, 240, 0.7);
-          backdrop-filter: blur(8px);
-          border: 1px solid rgba(190, 60, 60, 0.5);
+        /* Slider frame: solid tint only — backdrop-blur + padding caused pale seams next to photos on mobile */
+        .hero-slider-frame {
+          background: linear-gradient(145deg, #f5d0d0 0%, #e8a8a8 100%);
+          border: 2px solid rgba(160, 45, 45, 0.45);
+          -webkit-backface-visibility: hidden;
+          backface-visibility: hidden;
         }
 
         html {
@@ -187,11 +189,11 @@ const LandingPage = ({ onGetStarted }) => {
         )}
       </header>
 
-      {/* Hero Section */}
-      <section id="home" className="relative py-20 md:py-32 overflow-hidden">
+      {/* Hero Section — no overflow-hidden: it clipped scaled image layers and showed seams on narrow viewports */}
+      <section id="home" className="relative py-14 sm:py-20 md:py-32">
         <div className="container mx-auto px-4">
-          <div className="flex flex-col lg:flex-row items-center gap-12">
-            <div className="flex-1 space-y-7">
+          <div className="flex flex-col lg:flex-row items-center gap-6 md:gap-10 lg:gap-12">
+            <div className="flex-1 space-y-5 sm:space-y-7 w-full min-w-0">
               <div className="inline-block px-4 py-1 rounded-full bg-white/60 backdrop-blur-sm text-[#a1352a] text-sm font-semibold border border-red-300/60 shadow-sm">
                 <i className="fas fa-microchip mr-2"></i> AI-Powered Health Intelligence
               </div>
@@ -210,21 +212,29 @@ const LandingPage = ({ onGetStarted }) => {
                 </a>
               </div>
             </div>
-            <div className="flex-1 relative h-[420px] md:h-[520px] w-full">
-              <div className="absolute inset-0 rounded-3xl overflow-hidden shadow-2xl slider-border p-1">
+            <div className="flex-1 relative w-full min-w-0 h-[280px] sm:h-[360px] md:h-[520px]">
+              <div className="absolute inset-0 rounded-3xl overflow-hidden shadow-2xl hero-slider-frame">
                 {images.map((img, idx) => (
-                  <div 
+                  <img
                     key={img.id}
-                    className={`absolute inset-0 bg-cover bg-center rounded-2xl transition-all duration-700 ease-in-out ${currentImage === idx ? 'opacity-100 scale-100' : 'opacity-0 scale-105'}`}
-                    style={{ backgroundImage: `url(${img.url})`, backgroundSize: 'cover' }}
-                  ></div>
+                    src={img.url}
+                    alt={img.alt}
+                    className={`absolute inset-0 h-full w-full object-cover object-center pointer-events-none transition-opacity duration-700 ease-in-out ${
+                      currentImage === idx ? 'opacity-100 z-[1]' : 'opacity-0 z-0'
+                    }`}
+                    loading={idx === 0 ? 'eager' : 'lazy'}
+                    decoding="async"
+                    draggable={false}
+                  />
                 ))}
-                <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3 z-10">
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3 z-[2] pointer-events-auto">
                   {images.map((_, idx) => (
                     <button 
+                      type="button"
                       key={idx} 
                       onClick={() => setCurrentImage(idx)} 
-                      className={`w-2.5 h-2.5 rounded-full transition-all ${currentImage === idx ? 'bg-red-700 w-6' : 'bg-white/70'}`}
+                      className={`h-2.5 rounded-full transition-all shadow-sm ${currentImage === idx ? 'bg-red-800 w-6' : 'bg-white/85 w-2.5 hover:bg-white'}`}
+                      aria-label={`Show slide ${idx + 1}`}
                     ></button>
                   ))}
                 </div>
