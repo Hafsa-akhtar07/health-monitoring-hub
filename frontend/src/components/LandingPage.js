@@ -192,8 +192,8 @@ const LandingPage = ({ onGetStarted }) => {
       {/* Hero Section — no overflow-hidden: it clipped scaled image layers and showed seams on narrow viewports */}
       <section id="home" className="relative py-14 sm:py-20 md:py-32">
         <div className="container mx-auto px-4">
-          <div className="flex flex-col lg:flex-row items-center gap-6 md:gap-10 lg:gap-12">
-            <div className="flex-1 space-y-5 sm:space-y-7 w-full min-w-0">
+          <div className="flex flex-col items-center gap-6 md:gap-10 lg:flex-row lg:items-stretch lg:gap-12">
+            <div className="w-full min-w-0 flex-1 space-y-5 sm:space-y-7 lg:max-w-[55%]">
               <div className="inline-block px-4 py-1 rounded-full bg-white/60 backdrop-blur-sm text-[#a1352a] text-sm font-semibold border border-red-300/60 shadow-sm">
                 <i className="fas fa-microchip mr-2"></i> AI-Powered Health Intelligence
               </div>
@@ -212,31 +212,39 @@ const LandingPage = ({ onGetStarted }) => {
                 </a>
               </div>
             </div>
-            <div className="flex-1 relative w-full min-w-0 h-[280px] sm:h-[360px] md:h-[520px]">
-              <div className="absolute inset-0 rounded-3xl overflow-hidden shadow-2xl hero-slider-frame">
-                {images.map((img, idx) => (
-                  <img
-                    key={img.id}
-                    src={img.url}
-                    alt={img.alt}
-                    className={`absolute inset-0 h-full w-full object-cover object-center pointer-events-none transition-opacity duration-700 ease-in-out ${
-                      currentImage === idx ? 'opacity-100 z-[1]' : 'opacity-0 z-0'
-                    }`}
-                    loading={idx === 0 ? 'eager' : 'lazy'}
-                    decoding="async"
-                    draggable={false}
-                  />
-                ))}
-                <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3 z-[2] pointer-events-auto">
-                  {images.map((_, idx) => (
-                    <button 
-                      type="button"
-                      key={idx} 
-                      onClick={() => setCurrentImage(idx)} 
-                      className={`h-2.5 rounded-full transition-all shadow-sm ${currentImage === idx ? 'bg-red-800 w-6' : 'bg-white/85 w-2.5 hover:bg-white'}`}
-                      aria-label={`Show slide ${idx + 1}`}
-                    ></button>
+            {/* No flex-1 here: abs-only children gave ~0 intrinsic height in some breakpoints; aspect-ratio fixes real height */}
+            <div className="w-full shrink-0 lg:flex-1 lg:min-w-0 lg:max-w-[45%]">
+              <div className="relative w-full aspect-[4/3] min-h-[200px] md:aspect-auto md:h-[520px] md:min-h-[360px] rounded-3xl overflow-hidden shadow-2xl hero-slider-frame isolate">
+                <div className="grid h-full w-full min-h-0 grid-cols-1 grid-rows-1 [&>img]:col-start-1 [&>img]:row-start-1">
+                  {images.map((img, idx) => (
+                    <img
+                      key={img.id}
+                      src={img.url}
+                      alt={img.alt}
+                      referrerPolicy="no-referrer"
+                      className={`h-full w-full !max-w-none object-cover object-center transition-opacity duration-700 ease-in-out pointer-events-none ${
+                        currentImage === idx ? 'opacity-100 z-[1]' : 'opacity-0 z-0'
+                      }`}
+                      loading="eager"
+                      decoding="async"
+                      draggable={false}
+                      sizes="(max-width: 1024px) 100vw, 560px"
+                    />
                   ))}
+                </div>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] flex justify-center gap-3 pb-4 pt-10 bg-gradient-to-t from-black/25 to-transparent">
+                  <div className="pointer-events-auto flex justify-center gap-3">
+                    {images.map((_, idx) => (
+                      <button
+                        type="button"
+                        key={idx}
+                        onClick={() => setCurrentImage(idx)}
+                        className={`h-2.5 rounded-full transition-all shadow-sm ${currentImage === idx ? 'bg-red-800 w-6' : 'bg-white/85 w-2.5 hover:bg-white'}`}
+                        aria-label={`Show slide ${idx + 1}`}
+                      >
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
