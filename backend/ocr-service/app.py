@@ -89,19 +89,11 @@ def _env_int_any(names: list[str], default: int) -> int:
 
 # Defaults tuned for low-memory container apps.
 # You can override via env vars (see _env_* above).
-<<<<<<< HEAD
 OCR_MAX_EDGE = _env_int_any(["OCR_MAX_EDGE", "OCR_MAXEDGE", "MAX_EDGE"], 800)
 OCR_USE_TEXTLINE_ORI = _env_bool("OCR_USE_TEXTLINE_ORIENTATION", False)
 OCR_DET_LIMIT_SIDE = _env_int_any(
     ["OCR_TEXT_DET_LIMIT_SIDE_LEN", "OCR_DET_LIMIT_SIDE_LEN", "DET_LIMIT_SIDE_LEN"],
     512,
-=======
-OCR_MAX_EDGE = _env_int_any(["OCR_MAX_EDGE", "OCR_MAXEDGE", "MAX_EDGE"], 1000)
-OCR_USE_TEXTLINE_ORI = _env_bool("OCR_USE_TEXTLINE_ORIENTATION", False)
-OCR_DET_LIMIT_SIDE = _env_int_any(
-    ["OCR_TEXT_DET_LIMIT_SIDE_LEN", "OCR_DET_LIMIT_SIDE_LEN", "DET_LIMIT_SIDE_LEN"],
-    640,
->>>>>>> ba5a3f07bad9678296e961b9f18ef97cef52ea3a
 )
 OCR_SECOND_PASS = _env_bool("OCR_SECOND_PASS", False)
 OCR_LOG_FULL_JSON = _env_bool("OCR_LOG_FULL_JSON", False)
