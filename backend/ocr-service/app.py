@@ -71,30 +71,9 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-def _env_int_any(names: list[str], default: int) -> int:
-    """
-    Read an int env var from the first present key in `names`.
-    This makes deployments more robust across UI/typo variants.
-    """
-    for n in names:
-        v = os.environ.get(n)
-        if v is None:
-            continue
-        try:
-            return int(str(v).strip())
-        except ValueError:
-            return default
-    return default
-
-
-# Defaults tuned for low-memory container apps.
-# You can override via env vars (see _env_* above).
-OCR_MAX_EDGE = _env_int_any(["OCR_MAX_EDGE", "OCR_MAXEDGE", "MAX_EDGE"], 800)
+OCR_MAX_EDGE = _env_int("OCR_MAX_EDGE", 1600)
 OCR_USE_TEXTLINE_ORI = _env_bool("OCR_USE_TEXTLINE_ORIENTATION", False)
-OCR_DET_LIMIT_SIDE = _env_int_any(
-    ["OCR_TEXT_DET_LIMIT_SIDE_LEN", "OCR_DET_LIMIT_SIDE_LEN", "DET_LIMIT_SIDE_LEN"],
-    512,
-)
+OCR_DET_LIMIT_SIDE = _env_int("OCR_TEXT_DET_LIMIT_SIDE_LEN", 960)
 OCR_SECOND_PASS = _env_bool("OCR_SECOND_PASS", False)
 OCR_LOG_FULL_JSON = _env_bool("OCR_LOG_FULL_JSON", False)
 
@@ -696,8 +675,6 @@ if __name__ == "__main__":
     print(f"  max_edge={OCR_MAX_EDGE}  textline_ori={OCR_USE_TEXTLINE_ORI}  "
           f"det_limit={OCR_DET_LIMIT_SIDE}  second_pass={OCR_SECOND_PASS}")
     print(f"  ocr-code path: {ocr_code_path}")
-    port = int(os.environ.get("PORT", os.environ.get("OCR_SERVICE_PORT", "5002")))
-    host = os.environ.get("HOST", "0.0.0.0")
-    print(f"  Health: GET  http://{host}:{port}/health")
+    print("  Health: GET  http://127.0.0.1:5002/health")
     print("=" * 78)
-    app.run(host=host, port=port, debug=False)
+    app.run(host="127.0.0.1", port=5002, debug=True)

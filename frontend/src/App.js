@@ -154,6 +154,13 @@ function App() {
 
   // Initialize app based on URL on load
   useEffect(() => {
+    // Desktop starts with sidebar open; mobile starts closed.
+    try {
+      setSidebarOpen(window.innerWidth >= 768);
+    } catch (_) {
+      // ignore
+    }
+
     const token = authStorage.getToken();
     const savedUser = authStorage.getUser();
     const urlView = getViewFromUrl();
@@ -474,7 +481,7 @@ function App() {
             <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <button
                 type="button"
-                className="p-2 sm:p-3 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 shrink-0 md:hidden"
+                className="p-2 sm:p-3 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200 shrink-0"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 aria-label="Toggle sidebar"
               >
@@ -523,11 +530,13 @@ function App() {
             ></div>
           )}
 
-          {/* Sidebar: drawer on small screens, in-flow on md+ */}
+          {/* Sidebar: toggleable on all sizes */}
           <aside
             className={`${
-              sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-            } fixed left-0 top-16 bottom-0 z-[50] w-64 max-w-[min(100vw,16rem)] flex flex-col bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 overflow-y-auto md:static md:top-auto md:bottom-auto md:z-0 md:max-w-none md:translate-x-0 md:flex-shrink-0 md:overflow-y-visible md:shadow-none`}
+              sidebarOpen ? 'translate-x-0' : '-translate-x-full md:-translate-x-full'
+            } fixed left-0 top-16 bottom-0 z-[50] w-64 max-w-[min(100vw,16rem)] flex flex-col bg-white border-r border-gray-200 shadow-lg transition-transform duration-300 overflow-y-auto
+              md:static md:top-auto md:bottom-auto md:z-0 md:max-w-none md:flex-shrink-0 md:overflow-y-visible md:shadow-none
+              ${sidebarOpen ? 'md:w-64 md:border-r md:block' : 'md:w-0 md:border-r-0 md:overflow-hidden'}`}
           >
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between mb-4">

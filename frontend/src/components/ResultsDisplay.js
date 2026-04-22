@@ -182,6 +182,92 @@ const ResultsDisplay = ({ reportId, cbcData, gender, onBack, onUploadNew }) => {
     return out;
   }, []);
 
+  const normalizeSuggestions = useCallback((rawSuggestions) => {
+    const safeString = (v) => (v === null || v === undefined ? '' : String(v));
+
+    const tryParseJson = (value) => {
+      if (typeof value !== 'string') return value;
+      const s = value.trim();
+      if (!s) return value;
+      // Only attempt JSON parse when it looks like JSON
+      if (!(s.startsWith('{') || s.startsWith('['))) return value;
+      try {
+        return JSON.parse(s);
+      } catch (_) {
+        return value;
+      }
+    };
+
+    const asStringArray = (value) => {
+      if (value === null || value === undefined) return [];
+      const parsed = tryParseJson(value);
+
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((v) => (typeof v === 'string' ? v.trim() : safeString(v).trim()))
+          .filter(Boolean);
+      }
+
+      // Some models return a single string that contains multiple lines/bullets
+      if (typeof parsed === 'string') {
+        const s = parsed.trim();
+        if (!s) return [];
+        // Split on newlines or bullet-like separators if present
+        const parts = s
+          .split(/\r?\n|•|-\s+/g)
+          .map((p) => p.trim())
+          .filter(Boolean);
+        return parts.length > 1 ? parts : [s];
+      }
+
+      // If it's an object, stringify it (caller may handle object shapes separately)
+      if (typeof parsed === 'object') return [safeString(parsed)];
+
+      return [safeString(parsed)].filter(Boolean);
+    };
+
+    const suggestions = tryParseJson(rawSuggestions) || {};
+
+    // Sometimes the backend returns a *stringified whole suggestions object* inside one field
+    // (ex: dietaryRecommendations contains {"dietaryRecommendations":[...], ...} ).
+    const maybeWholeObject =
+      typeof suggestions === 'object' && suggestions !== null
+        ? suggestions
+        : tryParseJson(safeString(rawSuggestions));
+
+    const obj =
+      typeof maybeWholeObject === 'object' && maybeWholeObject !== null ? maybeWholeObject : {};
+
+    const dietaryRaw =
+      obj.dietaryRecommendations ?? obj.dietary ?? obj.diet ?? obj.dietary_recommendations;
+    const lifestyleRaw =
+      obj.lifestyleSuggestions ?? obj.lifestyle ?? obj.lifestyle_suggestions ?? obj.lifestyleRecommendations;
+    const medsRaw =
+      obj.possibleMedications ?? obj.medications ?? obj.possible_medications ?? obj.meds;
+    const doctorRaw =
+      obj.whenToConsultDoctor ?? obj.doctorConsult ?? obj.doctor_consult ?? obj.when_to_consult_doctor;
+    const disclaimerRaw =
+      obj.disclaimer ?? obj.medicalDisclaimer ?? obj.medical_disclaimer;
+
+    // possibleMedications can be array of strings OR array of objects.
+    const medsParsed = tryParseJson(medsRaw);
+    const medications = Array.isArray(medsParsed)
+      ? medsParsed
+      : asStringArray(medsParsed);
+
+    return {
+      dietary: asStringArray(dietaryRaw),
+      lifestyle: asStringArray(lifestyleRaw),
+      medications,
+      doctorConsult:
+        (typeof doctorRaw === 'string' ? doctorRaw : safeString(doctorRaw)).trim() ||
+        'Please consult a healthcare provider for proper diagnosis and treatment.',
+      disclaimer:
+        (typeof disclaimerRaw === 'string' ? disclaimerRaw : safeString(disclaimerRaw)).trim() ||
+        'This information is for educational purposes only and not a substitute for professional medical advice.'
+    };
+  }, []);
+
   // FIXED: Status text using range-width calculation consistently
   const getStatusText = (value, min, max) => {
     const numValue = parseFloat(value);
@@ -457,14 +543,7 @@ const ResultsDisplay = ({ reportId, cbcData, gender, onBack, onUploadNew }) => {
 
       const suggestions = backendAnalysis?.suggestions;
       if (suggestions) {
-        const mapped = {
-          dietary: suggestions.dietaryRecommendations || [],
-          lifestyle: suggestions.lifestyleSuggestions || [],
-          medications: suggestions.possibleMedications || [],
-          doctorConsult: suggestions.whenToConsultDoctor || 'Please consult a healthcare provider for proper diagnosis and treatment.',
-          disclaimer: suggestions.disclaimer || 'This information is for educational purposes only and not a substitute for professional medical advice.'
-        };
-        setOpenAIResponse(mapped);
+        setOpenAIResponse(normalizeSuggestions(suggestions));
         
         setTimeout(() => {
           if (recommendationsRef.current) {

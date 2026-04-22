@@ -147,13 +147,16 @@ const UploadReport = ({ onUploadSuccess, onBack, initialMode, initialState, onSt
   }, []);
 
   useEffect(() => {
-    if (initialState) {
-      if (initialState.uploadMethod) setUploadMethod(initialState.uploadMethod);
-      if (initialState.extractedData) setExtractedData(initialState.extractedData);
-      if (initialState.manualData) setManualData(initialState.manualData);
-      if (initialState.manualGender !== undefined) setManualGender(initialState.manualGender);
-    }
-  }, [initialState]);
+    if (!initialState) return;
+
+    // Important: if the parent explicitly set an initialMode (ex: "manual" route),
+    // do NOT let persisted state override the method selection.
+    if (!initialMode && initialState.uploadMethod) setUploadMethod(initialState.uploadMethod);
+
+    if (initialState.extractedData) setExtractedData(initialState.extractedData);
+    if (initialState.manualData) setManualData(initialState.manualData);
+    if (initialState.manualGender !== undefined) setManualGender(initialState.manualGender);
+  }, [initialState, initialMode]);
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
