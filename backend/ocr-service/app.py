@@ -25,8 +25,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-ocr_code_path = os.path.join(os.path.dirname(__file__), "..", "ocr-code")
-sys.path.insert(0, ocr_code_path)
+# ocr_code_path = os.path.join(os.path.dirname(__file__), "..", "ocr-code")
+# sys.path.insert(0, ocr_code_path)
 
 try:
     from paddleocr import PaddleOCR
@@ -37,8 +37,8 @@ except ImportError:
     print("⚠️ PaddleOCR not available. Install with: pip install paddleocr")
 
 try:
-    from parsers import parse_medical_report
-    from parsers.cbc_core_extractor import CANON_KEYS, summarize_fourteen_fields
+    from ocr_code.parsers import parse_medical_report
+    from ocr_code.parsers.cbc_core_extractor import CANON_KEYS, summarize_fourteen_fields
 
     PARSERS_AVAILABLE = True
 except ImportError as e:
