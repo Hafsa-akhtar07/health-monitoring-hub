@@ -25,8 +25,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-ocr_code_path = os.path.join(os.path.dirname(__file__), "..", "ocr-code")
-sys.path.insert(0, ocr_code_path)
+ocr_code_path = os.path.join(os.path.dirname(__file__), "ocr_code")
+sys.path.insert(0, os.path.dirname(__file__))
 
 try:
     from paddleocr import PaddleOCR
