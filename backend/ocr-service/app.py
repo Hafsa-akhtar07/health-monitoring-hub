@@ -670,11 +670,13 @@ def extract_report():
 
 
 if __name__ == "__main__":
+    import os
+
+    port = int(os.environ.get("PORT", 8000))
+
     print("=" * 78)
-    print("  HMH OCR API")
-    print(f"  max_edge={OCR_MAX_EDGE}  textline_ori={OCR_USE_TEXTLINE_ORI}  "
-          f"det_limit={OCR_DET_LIMIT_SIDE}  second_pass={OCR_SECOND_PASS}")
-    print(f"  ocr-code path: {ocr_code_path}")
-    print("  Health: GET  http://127.0.0.1:5002/health")
+    print("  HMH OCR API (Production Mode)")
+    print(f"  Running on port: {port}")
     print("=" * 78)
-    app.run(host="127.0.0.1", port=5002, debug=True)
+
+    app.run(host="0.0.0.0", port=port, debug=False)
