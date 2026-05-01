@@ -1,0 +1,766 @@
+{
+  "success": true,
+  "filename": "WhatsApp_Image_2026-04-11_at_7.56.02_PM_2.jpeg",
+  "processed_at": "2026-04-13T17:32:19.407532",
+  "ocr_pass_used": "Original",
+  "ocr_compare": {
+    "original": {
+      "score_lines": 124,
+      "score_chars": 1696,
+      "cbc_row_count": 14,
+      "ocr_seconds": 137.655739,
+      "total_detections": 124
+    },
+    "preprocessed": null,
+    "chosen": "Original",
+    "reason": "preprocessed_unavailable",
+    "preprocessed_error": null
+  },
+  "total_detections": 124,
+  "all_text": "DRLOGY PATHOLOGY LAB 0123456789 | 0912345678 drlogypathlab@drlogy.com Accurate | Caring | Instant 105 -108, SMART VISION COMPLEX, HEALTHCARE ROAD, OPPOSITE HEALTHCARE COMPLEX. MUMBAI- 689578 www.drlogy.com Yashvi M. Patel Sample Collected At: Age: 21 Years 125, Shiv complex, S G Road, Mumbai Registered on: 02:31 PM 02 DeC, 2X Sex : Female Sample Collected By: Mr Suresh Collected on: 03:11 PM 02 Dec, 2X UHID : 556 Ref. By: Dr. Hiren Shah Reported on: 04:35 PM 02 Dec, 2X Complete Blood Count (CBC) Investigation Result Reference Value Unit Sample Type Blood (2 ml) TAT: 1 day (Normal: 1 - 3 days) Hemoglobin (Hb) 11.50 Low 13.00 - 17.00 g/dL kmamunoturbidimetry Total RBC count 6.50 High 4.50 - 5.50 mill/cumm Electrical Impedance, VCS BLOOD INDICES Packed Cell Volume (PCV) Normal 45 40 - 50 % Calculated Mean Corpuscular Volume (MCV) Normal 100 83 -101 fL Calculated MCH 35 High 27 - 32 pg Calculated MCHC 32.50 - 34.50 Normal 33.00 g/dL Calculated Smart Pathoogy150-4ooratory RDW 11.60 - 14.00 12.00 Normal Calculated Total WBC count 4000 - 11000 High cumm lectrical Impedance, VCS 2500rlogy.c01-100 DIFFERENTIAL WBC COUNT Neutrophils 50 - 62 % Low 30 lectrical imoedance VCs ymphocytes 20 - 40 % High 60 lectrical Impedance, VCS Eosinophils 00 - 06 % Normal 2 lectrical Impedance, VCS Monocytes 00 - 10 % Normal 8 Jectrical Impedance, VCs 00 - 02 % Basophils Normal 0 lectrical Impedance, VCS 150000 - 410000 Normal cumm Platelet Count 20000 lectrical Impedance, VCS nstruments: Fully automated cell counter - Mindray 300 nterpretation: Further confirm for Anemia ****End of Report**** hanks for Reference Dr. Vimal Shah Dr. Payal Shah Medical Lab Technician (MD, Pathologist) (MD, Pathologist) (DMLT, BMLT) Generated on : 02 Dec, 202X 05:00 PM Page 1 of 1 To Check Report Authenticity by Scanning QR Code on Top",
+  "ocr_result": [
+    {
+      "text": "DRLOGY PATHOLOGY LAB",
+      "index": 0
+    },
+    {
+      "text": "0123456789 | 0912345678",
+      "index": 1
+    },
+    {
+      "text": "Accurate | Caring | Instant",
+      "index": 2
+    },
+    {
+      "text": "drlogypathlab@drlogy.com",
+      "index": 3
+    },
+    {
+      "text": "105 -108, SMART VISION COMPLEX, HEALTHCARE ROAD, OPPOSITE HEALTHCARE COMPLEX. MUMBAI- 689578",
+      "index": 4
+    },
+    {
+      "text": "www.drlogy.com",
+      "index": 5
+    },
+    {
+      "text": "Yashvi M. Patel",
+      "index": 6
+    },
+    {
+      "text": "Sample Collected At:",
+      "index": 7
+    },
+    {
+      "text": "Age: 21 Years",
+      "index": 8
+    },
+    {
+      "text": "125, Shiv complex, S G Road, Mumbai",
+      "index": 9
+    },
+    {
+      "text": "Sex : Female",
+      "index": 10
+    },
+    {
+      "text": "Registered on: 02:31 PM 02 DeC, 2X",
+      "index": 11
+    },
+    {
+      "text": "Sample Collected By: Mr Suresh",
+      "index": 12
+    },
+    {
+      "text": "UHID : 556",
+      "index": 13
+    },
+    {
+      "text": "Collected on: 03:11 PM 02 Dec, 2X",
+      "index": 14
+    },
+    {
+      "text": "Ref. By: Dr. Hiren Shah",
+      "index": 15
+    },
+    {
+      "text": "Reported on: 04:35 PM 02 Dec, 2X",
+      "index": 16
+    },
+    {
+      "text": "Complete Blood Count (CBC)",
+      "index": 17
+    },
+    {
+      "text": "Investigation",
+      "index": 18
+    },
+    {
+      "text": "Result",
+      "index": 19
+    },
+    {
+      "text": "Reference Value",
+      "index": 20
+    },
+    {
+      "text": "Unit",
+      "index": 21
+    },
+    {
+      "text": "Sample Type",
+      "index": 22
+    },
+    {
+      "text": "Blood (2 ml)",
+      "index": 23
+    },
+    {
+      "text": "TAT: 1 day (Normal: 1 - 3 days)",
+      "index": 24
+    },
+    {
+      "text": "Hemoglobin (Hb)",
+      "index": 25
+    },
+    {
+      "text": "kmamunoturbidimetry",
+      "index": 26
+    },
+    {
+      "text": "11.50",
+      "index": 27
+    },
+    {
+      "text": "Low",
+      "index": 28
+    },
+    {
+      "text": "13.00 - 17.00",
+      "index": 29
+    },
+    {
+      "text": "g/dL",
+      "index": 30
+    },
+    {
+      "text": "Total RBC count",
+      "index": 31
+    },
+    {
+      "text": "6.50",
+      "index": 32
+    },
+    {
+      "text": "High",
+      "index": 33
+    },
+    {
+      "text": "4.50 - 5.50",
+      "index": 34
+    },
+    {
+      "text": "Electrical Impedance, VCS",
+      "index": 35
+    },
+    {
+      "text": "mill/cumm",
+      "index": 36
+    },
+    {
+      "text": "BLOOD INDICES",
+      "index": 37
+    },
+    {
+      "text": "Packed Cell Volume (PCV)",
+      "index": 38
+    },
+    {
+      "text": "45",
+      "index": 39
+    },
+    {
+      "text": "Normal",
+      "index": 40
+    },
+    {
+      "text": "40 - 50",
+      "index": 41
+    },
+    {
+      "text": "Calculated",
+      "index": 42
+    },
+    {
+      "text": "%",
+      "index": 43
+    },
+    {
+      "text": "Mean Corpuscular Volume (MCV)",
+      "index": 44
+    },
+    {
+      "text": "100",
+      "index": 45
+    },
+    {
+      "text": "Normal",
+      "index": 46
+    },
+    {
+      "text": "83 -101",
+      "index": 47
+    },
+    {
+      "text": "fL",
+      "index": 48
+    },
+    {
+      "text": "Calculated",
+      "index": 49
+    },
+    {
+      "text": "MCH",
+      "index": 50
+    },
+    {
+      "text": "35",
+      "index": 51
+    },
+    {
+      "text": "High",
+      "index": 52
+    },
+    {
+      "text": "27 - 32",
+      "index": 53
+    },
+    {
+      "text": "Calculated",
+      "index": 54
+    },
+    {
+      "text": "pg",
+      "index": 55
+    },
+    {
+      "text": "MCHC",
+      "index": 56
+    },
+    {
+      "text": "Smart Pathoogy150-4ooratory",
+      "index": 57
+    },
+    {
+      "text": "33.00",
+      "index": 58
+    },
+    {
+      "text": "Normal",
+      "index": 59
+    },
+    {
+      "text": "32.50 - 34.50",
+      "index": 60
+    },
+    {
+      "text": "g/dL",
+      "index": 61
+    },
+    {
+      "text": "Calculated",
+      "index": 62
+    },
+    {
+      "text": "RDW",
+      "index": 63
+    },
+    {
+      "text": "12.00",
+      "index": 64
+    },
+    {
+      "text": "Normal",
+      "index": 65
+    },
+    {
+      "text": "11.60 - 14.00",
+      "index": 66
+    },
+    {
+      "text": "Calculated",
+      "index": 67
+    },
+    {
+      "text": "Total WBC count",
+      "index": 68
+    },
+    {
+      "text": "2500rlogy.c01-100",
+      "index": 69
+    },
+    {
+      "text": "High",
+      "index": 70
+    },
+    {
+      "text": "4000 - 11000",
+      "index": 71
+    },
+    {
+      "text": "cumm",
+      "index": 72
+    },
+    {
+      "text": "lectrical Impedance, VCS",
+      "index": 73
+    },
+    {
+      "text": "DIFFERENTIAL WBC COUNT",
+      "index": 74
+    },
+    {
+      "text": "Neutrophils",
+      "index": 75
+    },
+    {
+      "text": "30",
+      "index": 76
+    },
+    {
+      "text": "Low",
+      "index": 77
+    },
+    {
+      "text": "50 - 62",
+      "index": 78
+    },
+    {
+      "text": "%",
+      "index": 79
+    },
+    {
+      "text": "lectrical imoedance VCs",
+      "index": 80
+    },
+    {
+      "text": "ymphocytes",
+      "index": 81
+    },
+    {
+      "text": "60",
+      "index": 82
+    },
+    {
+      "text": "High",
+      "index": 83
+    },
+    {
+      "text": "20 - 40",
+      "index": 84
+    },
+    {
+      "text": "%",
+      "index": 85
+    },
+    {
+      "text": "lectrical Impedance, VCS",
+      "index": 86
+    },
+    {
+      "text": "Eosinophils",
+      "index": 87
+    },
+    {
+      "text": "2",
+      "index": 88
+    },
+    {
+      "text": "Normal",
+      "index": 89
+    },
+    {
+      "text": "00 - 06",
+      "index": 90
+    },
+    {
+      "text": "%",
+      "index": 91
+    },
+    {
+      "text": "lectrical Impedance, VCS",
+      "index": 92
+    },
+    {
+      "text": "Monocytes",
+      "index": 93
+    },
+    {
+      "text": "8",
+      "index": 94
+    },
+    {
+      "text": "Normal",
+      "index": 95
+    },
+    {
+      "text": "00 - 10",
+      "index": 96
+    },
+    {
+      "text": "%",
+      "index": 97
+    },
+    {
+      "text": "Jectrical Impedance, VCs",
+      "index": 98
+    },
+    {
+      "text": "Basophils",
+      "index": 99
+    },
+    {
+      "text": "0",
+      "index": 100
+    },
+    {
+      "text": "Normal",
+      "index": 101
+    },
+    {
+      "text": "00 - 02",
+      "index": 102
+    },
+    {
+      "text": "%",
+      "index": 103
+    },
+    {
+      "text": "lectrical Impedance, VCS",
+      "index": 104
+    },
+    {
+      "text": "Platelet Count",
+      "index": 105
+    },
+    {
+      "text": "20000",
+      "index": 106
+    },
+    {
+      "text": "Normal",
+      "index": 107
+    },
+    {
+      "text": "150000 - 410000",
+      "index": 108
+    },
+    {
+      "text": "cumm",
+      "index": 109
+    },
+    {
+      "text": "lectrical Impedance, VCS",
+      "index": 110
+    },
+    {
+      "text": "nstruments: Fully automated cell counter - Mindray 300",
+      "index": 111
+    },
+    {
+      "text": "nterpretation: Further confirm for Anemia",
+      "index": 112
+    },
+    {
+      "text": "****End of Report****",
+      "index": 113
+    },
+    {
+      "text": "hanks for Reference",
+      "index": 114
+    },
+    {
+      "text": "Dr. Payal Shah",
+      "index": 115
+    },
+    {
+      "text": "Dr. Vimal Shah",
+      "index": 116
+    },
+    {
+      "text": "Medical Lab Technician",
+      "index": 117
+    },
+    {
+      "text": "(MD, Pathologist)",
+      "index": 118
+    },
+    {
+      "text": "(MD, Pathologist)",
+      "index": 119
+    },
+    {
+      "text": "(DMLT, BMLT)",
+      "index": 120
+    },
+    {
+      "text": "Generated on : 02 Dec, 202X 05:00 PM",
+      "index": 121
+    },
+    {
+      "text": "Page 1 of 1",
+      "index": 122
+    },
+    {
+      "text": "To Check Report Authenticity by Scanning QR Code on Top",
+      "index": 123
+    }
+  ],
+  "cbc_fourteen": {
+    "hemoglobin": {
+      "found": true,
+      "observed_value": "11.5",
+      "unit": "g/dL",
+      "test_name": "Hemoglobin"
+    },
+    "hematocrit": {
+      "found": true,
+      "observed_value": "45.0",
+      "unit": "%",
+      "test_name": "Hematocrit"
+    },
+    "rbc": {
+      "found": true,
+      "observed_value": "6.5",
+      "unit": "",
+      "test_name": "RBC count"
+    },
+    "wbc": {
+      "found": true,
+      "observed_value": "2500.0",
+      "unit": "",
+      "test_name": "WBC count"
+    },
+    "platelets": {
+      "found": true,
+      "observed_value": "20000.0",
+      "unit": "",
+      "test_name": "Platelet count"
+    },
+    "mcv": {
+      "found": true,
+      "observed_value": "100.0",
+      "unit": "fL",
+      "test_name": "MCV"
+    },
+    "mch": {
+      "found": true,
+      "observed_value": "35.0",
+      "unit": "pg",
+      "test_name": "MCH"
+    },
+    "mchc": {
+      "found": true,
+      "observed_value": "32.5",
+      "unit": "g/dL",
+      "test_name": "MCHC"
+    },
+    "rdw": {
+      "found": true,
+      "observed_value": "12.0",
+      "unit": "%",
+      "test_name": "RDW"
+    },
+    "neutrophils": {
+      "found": true,
+      "observed_value": "30.0",
+      "unit": "%",
+      "test_name": "Neutrophils"
+    },
+    "lymphocytes": {
+      "found": true,
+      "observed_value": "60.0",
+      "unit": "%",
+      "test_name": "Lymphocytes"
+    },
+    "monocytes": {
+      "found": true,
+      "observed_value": "8.0",
+      "unit": "%",
+      "test_name": "Monocytes"
+    },
+    "eosinophils": {
+      "found": true,
+      "observed_value": "2.0",
+      "unit": "%",
+      "test_name": "Eosinophils"
+    },
+    "basophils": {
+      "found": true,
+      "observed_value": "0.0",
+      "unit": "%",
+      "test_name": "Basophils"
+    }
+  },
+  "structured_data": {
+    "patient_info": {},
+    "laboratory_info": {},
+    "haematology_report": [
+      {
+        "test_name": "Hemoglobin",
+        "observed_value": "11.5",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "Hematocrit",
+        "observed_value": "45.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "RBC count",
+        "observed_value": "6.5",
+        "unit": ""
+      },
+      {
+        "test_name": "WBC count",
+        "observed_value": "2500.0",
+        "unit": ""
+      },
+      {
+        "test_name": "Platelet count",
+        "observed_value": "20000.0",
+        "unit": ""
+      },
+      {
+        "test_name": "MCV",
+        "observed_value": "100.0",
+        "unit": "fL"
+      },
+      {
+        "test_name": "MCH",
+        "observed_value": "35.0",
+        "unit": "pg"
+      },
+      {
+        "test_name": "MCHC",
+        "observed_value": "32.5",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "RDW",
+        "observed_value": "12.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Neutrophils",
+        "observed_value": "30.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Lymphocytes",
+        "observed_value": "60.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Monocytes",
+        "observed_value": "8.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Eosinophils",
+        "observed_value": "2.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Basophils",
+        "observed_value": "0.0",
+        "unit": "%"
+      }
+    ],
+    "blood_indices": [],
+    "morphology": {},
+    "footer_info": {},
+    "other_fields": {}
+  },
+  "structured_data_original": {
+    "patient_info": {},
+    "laboratory_info": {},
+    "haematology_report": [
+      {
+        "test_name": "Hemoglobin",
+        "observed_value": "11.5",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "Hematocrit",
+        "observed_value": "45.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "RBC count",
+        "observed_value": "6.5",
+        "unit": ""
+      },
+      {
+        "test_name": "WBC count",
+        "observed_value": "2500.0",
+        "unit": ""
+      },
+      {
+        "test_name": "Platelet count",
+        "observed_value": "20000.0",
+        "unit": ""
+      },
+      {
+        "test_name": "MCV",
+        "observed_value": "100.0",
+        "unit": "fL"
+      },
+      {
+        "test_name": "MCH",
+        "observed_value": "35.0",
+        "unit": "pg"
+      },
+      {
+        "test_name": "MCHC",
+        "observed_value": "32.5",
+        "unit": "g/dL"
+      },
+      {
+        "test_name": "RDW",
+        "observed_value": "12.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Neutrophils",
+        "observed_value": "30.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Lymphocytes",
+        "observed_value": "60.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Monocytes",
+        "observed_value": "8.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Eosinophils",
+        "observed_value": "2.0",
+        "unit": "%"
+      },
+      {
+        "test_name": "Basophils",
+        "observed_value": "0.0",
+        "unit": "%"
+      }
+    ],
+    "blood_indices": [],
+    "morphology": {},
+    "footer_info": {},
+    "other_fields": {}
+  },
+  "structured_data_preprocessed": null
+}
