@@ -154,13 +154,6 @@ function App() {
 
   // Initialize app based on URL on load
   useEffect(() => {
-    // Desktop starts with sidebar open; mobile starts closed.
-    try {
-      setSidebarOpen(window.innerWidth >= 768);
-    } catch (_) {
-      // ignore
-    }
-
     const token = authStorage.getToken();
     const savedUser = authStorage.getUser();
     const urlView = getViewFromUrl();
@@ -577,9 +570,7 @@ function App() {
                     } else {
                       handleNavigate(item.id);
                     }
-                    if (window.innerWidth < 768) {
-                      setSidebarOpen(false);
-                    }
+                    setSidebarOpen(false);
                   }}
                 >
                   <i className={`${item.icon} w-5`}></i>
