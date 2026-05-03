@@ -1,0 +1,146 @@
+{
+  "image_name": "WhatsApp Image 2025-12-15 at 00.15.49_b6ced31a.jpg",
+  "image_path": "images\\WhatsApp Image 2025-12-15 at 00.15.49_b6ced31a.jpg",
+  "processed_at": "2025-12-15T05:27:41.339596",
+  "patient_info": {
+    "patient_name": "MRS.AMIN",
+    "referring_doctor": "Incharge Cardiac Unit"
+  },
+  "laboratory_info": {
+    "name": "Akbarabad Mor, Near Alled Hospital, Falsalabad Info@arfadiagnostic.pk 041-2622889,0300-1622889"
+  },
+  "haematology_report": [
+    {
+      "test_name": "PHCR #",
+      "observed_value": "R-70604",
+      "unit": "",
+      "reference_range": ""
+    },
+    {
+      "test_name": "Track Online",
+      "observed_value": "81034",
+      "unit": "",
+      "reference_range": ""
+    },
+    {
+      "test_name": "81034",
+      "observed_value": "75919",
+      "unit": "",
+      "reference_range": ""
+    },
+    {
+      "test_name": "07/11/2025 06",
+      "observed_value": "07 PM",
+      "unit": "",
+      "reference_range": "07/11/2025 06:08 PM"
+    },
+    {
+      "test_name": "07/11/2025 06",
+      "observed_value": "08 PM",
+      "unit": "",
+      "reference_range": ""
+    },
+    {
+      "test_name": "Result",
+      "observed_value": "12.7",
+      "unit": "g/dl",
+      "reference_range": "Female: 11.5 - 14.0"
+    },
+    {
+      "test_name": "g/dl",
+      "observed_value": "12.7",
+      "unit": "%",
+      "reference_range": "Male: 13.5 -17.5"
+    },
+    {
+      "test_name": "↓37.8",
+      "observed_value": "4.42",
+      "unit": "",
+      "reference_range": "40.0 -52.0"
+    },
+    {
+      "test_name": "*10^12/1",
+      "observed_value": "4.42",
+      "unit": "fl",
+      "reference_range": "4-6"
+    },
+    {
+      "test_name": "fl",
+      "observed_value": "85.5",
+      "unit": "",
+      "reference_range": "75.0 - 100.0"
+    },
+    {
+      "test_name": "75.0 - 100.0",
+      "observed_value": "28.7",
+      "unit": "pg",
+      "reference_range": "25.0 - 35.0"
+    },
+    {
+      "test_name": "pg",
+      "observed_value": "33.6",
+      "unit": "g/dl",
+      "reference_range": "30-35"
+    },
+    {
+      "test_name": "g/dl",
+      "observed_value": "7",
+      "unit": "",
+      "reference_range": "4-17"
+    },
+    {
+      "test_name": "↓2.6",
+      "observed_value": "66",
+      "unit": "%",
+      "reference_range": "4-17"
+    },
+    {
+      "test_name": "66",
+      "observed_value": "30",
+      "unit": "%",
+      "reference_range": "40-75"
+    },
+    {
+      "test_name": "%",
+      "observed_value": "30",
+      "unit": "%",
+      "reference_range": "2-10"
+    },
+    {
+      "test_name": "2-10",
+      "observed_value": "02",
+      "unit": "%",
+      "reference_range": "1-6"
+    },
+    {
+      "test_name": "1-6",
+      "observed_value": "02",
+      "unit": "%",
+      "reference_range": "0.0-1.0"
+    },
+    {
+      "test_name": "%",
+      "observed_value": "263",
+      "unit": "",
+      "reference_range": "150-400"
+    },
+    {
+      "test_name": "150-400",
+      "observed_value": "263",
+      "unit": "",
+      "reference_range": ""
+    }
+  ],
+  "blood_indices": [],
+  "morphology": {},
+  "footer_info": {
+    "doctor_name": "Consultant Radialogist",
+    "qualification": "R.P.M.D.C"
+  },
+  "other_fields": {
+    "Patient Name": "Inside Lab",
+    "Test Booked": "07/11/2025 06:07 PM",
+    "Collection Point": "ARFA AZIZ FATIMA",
+    "Consultant": "Test"
+  }
+}

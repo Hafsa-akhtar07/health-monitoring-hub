@@ -25,8 +25,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-ocr_code_path = os.path.join(os.path.dirname(__file__), "..", "ocr-code")
-sys.path.insert(0, ocr_code_path)
+ocr_code_path = os.path.join(os.path.dirname(__file__), "ocr_code")
+sys.path.insert(0, os.path.dirname(__file__))
 
 try:
     from paddleocr import PaddleOCR
@@ -37,8 +37,8 @@ except ImportError:
     print("⚠️ PaddleOCR not available. Install with: pip install paddleocr")
 
 try:
-    from parsers import parse_medical_report
-    from parsers.cbc_core_extractor import CANON_KEYS, summarize_fourteen_fields
+    from ocr_code.parsers import parse_medical_report
+    from ocr_code.parsers.cbc_core_extractor import CANON_KEYS, summarize_fourteen_fields
 
     PARSERS_AVAILABLE = True
 except ImportError as e:
@@ -670,11 +670,13 @@ def extract_report():
 
 
 if __name__ == "__main__":
+    import os
+
+    port = int(os.environ.get("PORT", 8000))
+
     print("=" * 78)
-    print("  HMH OCR API")
-    print(f"  max_edge={OCR_MAX_EDGE}  textline_ori={OCR_USE_TEXTLINE_ORI}  "
-          f"det_limit={OCR_DET_LIMIT_SIDE}  second_pass={OCR_SECOND_PASS}")
-    print(f"  ocr-code path: {ocr_code_path}")
-    print("  Health: GET  http://127.0.0.1:5002/health")
+    print("  HMH OCR API (Production Mode)")
+    print(f"  Running on port: {port}")
     print("=" * 78)
-    app.run(host="127.0.0.1", port=5002, debug=True)
+
+    app.run(host="0.0.0.0", port=port, debug=False)
